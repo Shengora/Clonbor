@@ -9,30 +9,55 @@ from bot.core.userbot import userbot_manager
 def get_main_keyboard():
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="📱 Nomer olish", callback_data="user:get_number"),
-             InlineKeyboardButton(text="💰 Balans", callback_data="user:balance")],
-            [InlineKeyboardButton(text="ℹ️ Ma'lumot", callback_data="user:info")]
+            [InlineKeyboardButton(text="My Stats", callback_data="user:stats")],
+            [InlineKeyboardButton(text="Yordamchi", callback_data="user:help")],
+            [InlineKeyboardButton(text="Pul yechish", callback_data="user:withdraw")],
+            [InlineKeyboardButton(text="Mening kartalarim", callback_data="user:cards")]
         ]
     )
     return keyboard
 
+def get_reply_keyboard():
+    return types.ReplyKeyboardMarkup(
+        keyboard=[
+            [types.KeyboardButton(text="Yordamchi")]
+        ],
+        resize_keyboard=True
+    )
+
 async def start_command(message: types.Message):
     await db.add_user(message.from_user.id)
+
+    await message.answer("🛠 Menyu:", reply_markup=get_reply_keyboard())
+
     await message.answer(
-        "Assalomu alaykum! Xush kelibsiz.\n"
-        "Quyidagi menyudan kerakli bo'limni tanlang:",
+        "👋 Xush kelibsiz!\n\n"
+        "Raqam olish uchun /getNumber yozing.",
         reply_markup=get_main_keyboard()
     )
 
-async def balance_handler(callback_query: types.CallbackQuery):
+async def stats_handler(callback_query: types.CallbackQuery):
     user = await db.get_user(callback_query.from_user.id)
     if user:
         await callback_query.message.answer(
-            f"💰 Sizning balansingiz: {user['balance']} so'm\n"
-            f"🌟 Premium qilingan raqamlar: {user['premium_count']}"
+            f"📊 Sizning statistikangiz:\n\n"
+            f"💰 Balans: {user['balance']} so'm\n"
+            f"🌟 Premium raqamlar: {user['premium_count']} ta"
         )
     else:
         await callback_query.message.answer("Siz ro'yxatdan o'tmagansiz. Iltimos /start bosing.")
+    await callback_query.answer()
+
+async def help_handler(callback_query: types.CallbackQuery):
+    await callback_query.message.answer("📞 Yordamchi bo'limiga xush kelibsiz.\n\nSavollaringiz bo'lsa yoki yordam kerak bo'lsa adminga murojaat qiling.")
+    await callback_query.answer()
+
+async def withdraw_handler(callback_query: types.CallbackQuery):
+    await callback_query.message.answer("💸 Pul yechish bo'limi tez kunda ishga tushadi.")
+    await callback_query.answer()
+
+async def cards_handler(callback_query: types.CallbackQuery):
+    await callback_query.message.answer("💳 Mening kartalarim bo'limi tez kunda ishga tushadi.")
     await callback_query.answer()
 
 def create_inline_keyboard_from_source(source_markup) -> InlineKeyboardMarkup | None:
@@ -50,6 +75,17 @@ def create_inline_keyboard_from_source(source_markup) -> InlineKeyboardMarkup | 
         inline_keyboard.append(new_row)
 
     return InlineKeyboardMarkup(inline_keyboard=inline_keyboard)
+
+async def get_number_command(message: types.Message):
+    await message.answer("⏳ Raqam olinmoqda, kuting...")
+
+    response = await userbot_manager.request_number(message.from_user.id)
+
+    if response:
+        keyboard = create_inline_keyboard_from_source(response.get("reply_markup"))
+        await message.answer(response.get("text", "Raqam ma'lumotlari:"), reply_markup=keyboard)
+    else:
+        await message.answer("❌ Hozircha bo'sh raqamlar yo'q yoki manba bilan bog'lanishda xatolik yuz berdi.")
 
 async def get_number_handler(callback_query: types.CallbackQuery):
     await callback_query.message.answer("⏳ Raqam olinmoqda, kuting...")
@@ -94,9 +130,19 @@ async def info_handler(callback_query: types.CallbackQuery):
     await callback_query.message.answer("Bu bot orqali manba botdan raqam olib, premium qilishingiz mumkin.")
     await callback_query.answer()
 
+async def help_message_handler(message: types.Message):
+    await message.answer("📞 Yordamchi bo'limiga xush kelibsiz.\n\nSavollaringiz bo'lsa yoki yordam kerak bo'lsa adminga murojaat qiling.")
+
 def register_user_handlers(dp: Dispatcher):
     dp.message.register(start_command, Command("start"))
-    dp.callback_query.register(balance_handler, F.data == "user:balance")
+    dp.message.register(get_number_command, Command("getNumber"))
+    dp.message.register(help_message_handler, F.text == "Yordamchi")
+
+    dp.callback_query.register(stats_handler, F.data == "user:stats")
+    dp.callback_query.register(help_handler, F.data == "user:help")
+    dp.callback_query.register(withdraw_handler, F.data == "user:withdraw")
+    dp.callback_query.register(cards_handler, F.data == "user:cards")
+
     dp.callback_query.register(get_number_handler, F.data == "user:get_number")
     dp.callback_query.register(info_handler, F.data == "user:info")
     dp.callback_query.register(source_button_callback, F.data.startswith("source_btn:"))
