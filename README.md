@@ -15,16 +15,14 @@ Bu bot foydalanuvchilar va boshqa bir (manba) Telegram bot o'rtasida vositachi (
    ```
    Va ichidagi ma'lumotlarni o'zingiznikiga o'zgartiring (BOT_TOKEN, ADMIN_IDS, API_ID, API_HASH, SOURCE_BOT_USERNAME).
 
-3. Manba bot bilan ishlovchi akkauntlarni (Userbot) qo'shish:
+3. Botni ishga tushirish:
    ```bash
-   python3 add_session.py +998901234567
-   ```
-   Va kelgan kodni kiritib tasdiqlang.
-
-4. Botni ishga tushirish:
-   ```bash
+   export PYTHONPATH=$(pwd)
    python3 bot/main.py
    ```
+
+4. Manba bot bilan ishlovchi akkauntlarni (Userbot) qo'shish:
+   Botni ishga tushirgach, `/admin` buyrug'i orqali Admin panelga kiring. U yerdagi "Akkauntlar" va "➕ Akkaunt qo'shish" tugmasi orqali to'g'ridan-to'g'ri bot ichida telefon raqam, kod va (agar mavjud bo'lsa) 2FA parolini kiritib, yangi manba akkauntlarini ulashingiz mumkin.
 
 ## Xususiyatlar
 - Foydalanuvchilar balansini boshqarish

@@ -1,10 +1,12 @@
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
+from aiogram.fsm.context import FSMContext
 import asyncio
 
 from bot.database import db
 from bot.core.config import ADMIN_IDS
-from bot.keyboards.inline import get_admin_panel_keyboard, get_accounts_keyboard
+from bot.keyboards.inline import get_admin_panel_keyboard, get_accounts_keyboard, get_sources_keyboard
+from bot.handlers.fsm import AdminStates
 
 async def is_admin(user_id: int) -> bool:
     return user_id in ADMIN_IDS
@@ -26,7 +28,7 @@ async def admin_command(message: types.Message):
 
     await message.answer(text, reply_markup=get_admin_panel_keyboard())
 
-async def admin_callback(callback_query: types.CallbackQuery):
+async def admin_callback(callback_query: types.CallbackQuery, state: FSMContext):
     if not await is_admin(callback_query.from_user.id):
         return
 
@@ -45,9 +47,9 @@ async def admin_callback(callback_query: types.CallbackQuery):
         await callback_query.message.edit_text(text, reply_markup=get_admin_panel_keyboard())
 
     elif action == "add_account":
-        # Simply instructing user to run a python script to add sessions into SQLite directly for security
-        await callback_query.message.answer("Yangi akkaunt qo'shish uchun serverda `python3 add_session.py <phone_number>` komandasini ishlating va kodni kiriting.")
-        await callback_query.answer()
+        from bot.handlers.session_creator import ask_phone_number
+        await ask_phone_number(callback_query, state)
+
     elif action == "accounts":
         accounts = await db.get_all_accounts()
         await callback_query.message.edit_text(
@@ -83,9 +85,38 @@ async def admin_callback(callback_query: types.CallbackQuery):
         await callback_query.message.answer(f"Joriy user narxi: {current_price} so'm.\nO'zgartirish uchun hali alohida state yozilmagan (simulyatsiya).")
         await callback_query.answer()
 
+    elif action == "sources":
+        await callback_query.message.edit_text(
+            "Manbalar (Source bots) bo'limi:",
+            reply_markup=get_sources_keyboard()
+        )
+
+    elif action == "source_info":
+        current_source = await db.get_setting("source_bot")
+        await callback_query.answer(f"Joriy manba bot: {current_source}", show_alert=True)
+
+    elif action == "source_change":
+        await callback_query.message.answer("Yangi manba bot usernamesini kiriting (masalan: @yangi_bot):")
+        await state.set_state(AdminStates.waiting_for_new_source)
+        await callback_query.answer()
+
     else:
         await callback_query.answer("Bu bo'lim hali to'liq ishga tushirilmagan.", show_alert=True)
+
+async def set_new_source_bot(message: types.Message, state: FSMContext):
+    if not await is_admin(message.from_user.id):
+        return
+
+    new_source = message.text.strip()
+    if not new_source.startswith("@"):
+        await message.answer("Xato! Username @ bilan boshlanishi kerak.")
+        return
+
+    await db.set_setting("source_bot", new_source)
+    await message.answer(f"Manba bot muvaffaqiyatli o'zgartirildi: {new_source}\nIltimos botni restart qiling, yangi filter ishlashi uchun.")
+    await state.clear()
 
 def register_admin_handlers(dp: Dispatcher):
     dp.message.register(admin_command, Command("admin"))
     dp.callback_query.register(admin_callback, F.data.startswith("admin:"))
+    dp.message.register(set_new_source_bot, AdminStates.waiting_for_new_source)

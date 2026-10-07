@@ -48,10 +48,20 @@ def get_admin_panel_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="Stat yuklab olish", callback_data="admin:download_stat")],
 
         # Row 13
-        [InlineKeyboardButton(text="User narxi", callback_data="admin:user_price")]
+        [InlineKeyboardButton(text="User narxi", callback_data="admin:user_price")],
+
+        # Row 14
+        [InlineKeyboardButton(text="Manbalar", callback_data="admin:sources")]
     ])
 
     return keyboard
+
+def get_sources_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Joriy manba haqida", callback_data="admin:source_info")],
+        [InlineKeyboardButton(text="Manba botni o'zgartirish", callback_data="admin:source_change")],
+        [InlineKeyboardButton(text="🔙 Orqaga", callback_data="admin:main")]
+    ])
 
 def get_accounts_keyboard(accounts) -> InlineKeyboardMarkup:
     buttons = []

@@ -8,6 +8,19 @@ from collections import defaultdict
 from bot.database import db
 from bot.core.config import API_ID, API_HASH, SOURCE_BOT_USERNAME
 
+async def dynamic_source_filter(_, __, message: Message):
+    active_source = await db.get_setting("source_bot")
+    if not active_source:
+        from bot.core.config import SOURCE_BOT_USERNAME
+        active_source = SOURCE_BOT_USERNAME
+
+    if message.chat and message.chat.username:
+        return message.chat.username.lower() == active_source.replace("@", "").lower()
+    return False
+
+source_filter = filters.create(dynamic_source_filter)
+
+
 logger = logging.getLogger(__name__)
 
 class UserbotManager:
@@ -19,6 +32,13 @@ class UserbotManager:
         self.response_events = defaultdict(asyncio.Event)
         self.response_data = {}
         self.client_locks = defaultdict(asyncio.Lock)
+
+
+    async def _get_active_source(self):
+        active_source = await db.get_setting("source_bot")
+        if not active_source:
+            active_source = SOURCE_BOT_USERNAME
+        return active_source
 
     async def start_all(self):
         accounts = await db.get_all_accounts()
@@ -32,8 +52,8 @@ class UserbotManager:
                     in_memory=True
                 )
 
-                @client.on_message(filters.chat(SOURCE_BOT_USERNAME))
-                @client.on_edited_message(filters.chat(SOURCE_BOT_USERNAME))
+                @client.on_message(source_filter)
+                @client.on_edited_message(source_filter)
                 async def handle_source_message(c: Client, m: Message):
                     # Basic mechanism: unlock the event when the bot replies.
                     # In a fully robust system, you'd match the response to the exact user request.
@@ -63,7 +83,7 @@ class UserbotManager:
             self.response_events[client.name].clear()
 
             try:
-                msg = await client.send_message(SOURCE_BOT_USERNAME, "/getNumber")
+                msg = await client.send_message(await self._get_active_source(), "/getNumber")
 
                 # Wait for the event to be set by the message handler
                 try:
@@ -99,13 +119,13 @@ class UserbotManager:
         async with self.client_locks[client.name]:
             self.response_events[client.name].clear()
             try:
-                message = await client.get_messages(SOURCE_BOT_USERNAME, source_message_id)
+                message = await client.get_messages(await self._get_active_source(), source_message_id)
                 if message.reply_markup:
                     for row in message.reply_markup.inline_keyboard:
                         for button in row:
                             if button.text.lower() == button_data.lower() or button.callback_data == button_data:
                                 await client.request_callback_answer(
-                                    chat_id=SOURCE_BOT_USERNAME,
+                                    chat_id=await self._get_active_source(),
                                     message_id=source_message_id,
                                     callback_data=button.callback_data
                                 )
@@ -115,7 +135,7 @@ class UserbotManager:
                                 except asyncio.TimeoutError:
                                     pass # Proceed to fetch anyway
 
-                                edited_message = await client.get_messages(SOURCE_BOT_USERNAME, source_message_id)
+                                edited_message = await client.get_messages(await self._get_active_source(), source_message_id)
                                 return {"text": edited_message.text, "reply_markup": edited_message.reply_markup}
                 return None
             except Exception as e:

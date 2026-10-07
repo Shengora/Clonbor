@@ -46,11 +46,14 @@ async def init_db():
             )
         ''')
 
+        from bot.core.config import SOURCE_BOT_USERNAME
+
         # Insert default settings if not exists
         default_settings = [
             ('slot_limit', '20'),
             ('number_status', '1'),  # 1 for active, 0 for inactive
-            ('user_price', '5000') # default price added to user balance
+            ('user_price', '5000'), # default price added to user balance
+            ('source_bot', SOURCE_BOT_USERNAME) # active source bot username
         ]
 
         for key, value in default_settings:
