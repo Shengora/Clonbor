@@ -69,12 +69,15 @@ async def process_code(message: types.Message, state: FSMContext):
 
         # Successfully signed in
         session_string = await client.export_session_string()
-        await db.add_account(phone_number, session_string)
+        account_id = await db.add_account(phone_number, session_string)
 
         await client.disconnect()
         del login_clients[message.from_user.id]
 
-        await message.answer("✅ Akkaunt muvaffaqiyatli saqlandi! Yangi akkauntni ishlashi uchun botni restart qiling.")
+        from bot.core.userbot import userbot_manager
+        await userbot_manager.start_account(account_id, session_string)
+
+        await message.answer("✅ Akkaunt muvaffaqiyatli saqlandi va avtomatik ishga tushirildi! Endi raqam olish mumkin.")
         await state.clear()
 
     except SessionPasswordNeeded:
@@ -110,12 +113,15 @@ async def process_password(message: types.Message, state: FSMContext):
         await client.check_password(password)
 
         session_string = await client.export_session_string()
-        await db.add_account(phone_number, session_string)
+        account_id = await db.add_account(phone_number, session_string)
 
         await client.disconnect()
         del login_clients[message.from_user.id]
 
-        await message.answer("✅ Akkaunt muvaffaqiyatli saqlandi! Yangi akkauntni ishlashi uchun botni restart qiling.")
+        from bot.core.userbot import userbot_manager
+        await userbot_manager.start_account(account_id, session_string)
+
+        await message.answer("✅ Akkaunt muvaffaqiyatli saqlandi va avtomatik ishga tushirildi! Endi raqam olish mumkin.")
         await state.clear()
 
     except Exception as e:

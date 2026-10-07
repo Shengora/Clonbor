@@ -18,6 +18,10 @@ async def main():
     await userbot_manager.start_all()
 
     bot = Bot(token=BOT_TOKEN)
+
+    from bot.core.forwarder import forwarder
+    forwarder.set_bot(bot)
+
     dp = Dispatcher()
 
     register_all_handlers(dp)

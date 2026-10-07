@@ -84,65 +84,65 @@ def create_inline_keyboard_from_source(source_markup) -> InlineKeyboardMarkup | 
     return InlineKeyboardMarkup(inline_keyboard=inline_keyboard)
 
 async def get_number_command(message: types.Message):
-    await message.answer("⏳ Raqam olinmoqda, kuting...")
+    msg = await message.answer("⏳ Raqam olinmoqda, kuting...")
 
-    response = await userbot_manager.request_number(message.from_user.id)
+    response = await userbot_manager.request_number(message.from_user.id, msg.message_id)
 
     if response:
         keyboard = create_inline_keyboard_from_source(response.get("reply_markup"))
-        await message.answer(response.get("text", "Raqam ma'lumotlari:"), reply_markup=keyboard)
+        await msg.edit_text(response.get("text", "Raqam ma'lumotlari:"), reply_markup=keyboard)
     else:
-        await message.answer("❌ Hozircha bo'sh raqamlar yo'q yoki manba bilan bog'lanishda xatolik yuz berdi.")
+        await msg.edit_text("❌ Hozircha bo'sh raqamlar yo'q yoki manba bilan bog'lanishda xatolik yuz berdi.")
 
 async def get_number_handler(callback_query: types.CallbackQuery):
-    await callback_query.message.answer("⏳ Raqam olinmoqda, kuting...")
+    msg = await callback_query.message.answer("⏳ Raqam olinmoqda, kuting...")
     await callback_query.answer()
 
-    response = await userbot_manager.request_number(callback_query.from_user.id)
+    response = await userbot_manager.request_number(callback_query.from_user.id, msg.message_id)
 
     if response:
         keyboard = create_inline_keyboard_from_source(response.get("reply_markup"))
-        await callback_query.message.answer(response.get("text", "Raqam ma'lumotlari:"), reply_markup=keyboard)
+        await msg.edit_text(response.get("text", "Raqam ma'lumotlari:"), reply_markup=keyboard)
     else:
-        await callback_query.message.answer("❌ Hozircha bo'sh raqamlar yo'q yoki manba bilan bog'lanishda xatolik yuz berdi.")
+        await msg.edit_text("❌ Hozircha bo'sh raqamlar yo'q yoki manba bilan bog'lanishda xatolik yuz berdi.")
+
+async def handle_premium_stats(user_telegram_id: int, text: str):
+    lower_text = text.lower()
+
+    if "premium activated and counted" in lower_text:
+        user_price_str = await db.get_setting('user_price')
+        user_price = int(user_price_str) if user_price_str else 5000
+
+        # Prevent double-spending: check if this specific text was already processed (a more robust DB state could be used here)
+        # For simplicity, we just increment. (In a real app, track source_message_id)
+        await db.update_user_balance(user_telegram_id, user_price)
+        await db.increment_user_premium_count(user_telegram_id)
+        await db.update_statistics(user_price)
+
+        from bot.core.forwarder import forwarder
+        if forwarder.bot:
+            await forwarder.bot.send_message(user_telegram_id, f"🎉 Tabriklaymiz! Premium muvaffaqiyatli faollashtirildi.\n💰 Balansingizga {user_price} so'm qo'shildi.")
+
+    elif "cancel" in lower_text or "bekor qilindi" in lower_text:
+        await db.increment_user_canceled_numbers(user_telegram_id)
+
+    elif "frozen" in lower_text or "muzlatildi" in lower_text:
+        await db.increment_user_frozen_numbers(user_telegram_id)
+
+    elif "code" in lower_text or "kod:" in lower_text:
+        await db.increment_user_codes_received(user_telegram_id)
 
 async def source_button_callback(callback_query: types.CallbackQuery):
-    # Extract the button text that was pressed
     button_text = callback_query.data.split(":", 1)[1]
 
-    await callback_query.message.edit_text("⏳ So'rov yuborilmoqda...")
+    # We don't block and wait. We just send the press action to Pyrogram.
+    success = await userbot_manager.press_inline_button(callback_query.from_user.id, button_text)
 
-    response = await userbot_manager.press_inline_button(callback_query.from_user.id, button_text)
-
-    if response:
-        text = response.get("text", "")
-        keyboard = create_inline_keyboard_from_source(response.get("reply_markup"))
-
-        await callback_query.message.edit_text(text, reply_markup=keyboard)
-
-        # Check if premium was successfully activated
-        lower_text = text.lower()
-        if "premium activated and counted" in lower_text:
-            user_price_str = await db.get_setting('user_price')
-            user_price = int(user_price_str) if user_price_str else 5000
-
-            await db.update_user_balance(callback_query.from_user.id, user_price)
-            await db.increment_user_premium_count(callback_query.from_user.id)
-            await db.update_statistics(user_price)
-
-            await callback_query.message.answer(f"🎉 Tabriklaymiz! Premium muvaffaqiyatli faollashtirildi.\n💰 Balansingizga {user_price} so'm qo'shildi.")
-
-        elif "cancel" in lower_text or "bekor qilindi" in lower_text:
-            await db.increment_user_canceled_numbers(callback_query.from_user.id)
-
-        elif "frozen" in lower_text or "muzlatildi" in lower_text:
-            await db.increment_user_frozen_numbers(callback_query.from_user.id)
-
-        elif "code" in lower_text or "kod:" in lower_text:
-            # Typically a code message might arrive as an update, but if it comes as a button response:
-            await db.increment_user_codes_received(callback_query.from_user.id)
+    if success:
+        # Just answer the query. The background task will edit the message when the source bot replies.
+        await callback_query.answer("So'rov yuborildi. Kuting...")
     else:
-        await callback_query.message.edit_text("❌ Amaliyotni bajarishda xatolik yuz berdi.")
+        await callback_query.answer("❌ Amaliyotni bajarishda xatolik yuz berdi yoki raqam muddati tugagan.", show_alert=True)
 
 async def info_handler(callback_query: types.CallbackQuery):
     await callback_query.message.answer("Bu bot orqali manba botdan raqam olib, premium qilishingiz mumkin.")

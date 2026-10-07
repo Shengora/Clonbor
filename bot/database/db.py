@@ -136,10 +136,11 @@ async def get_active_account():
         async with db.execute('SELECT * FROM accounts WHERE status = "active" LIMIT 1') as cursor:
             return await cursor.fetchone()
 
-async def add_account(phone_number: str, session_string: str):
+async def add_account(phone_number: str, session_string: str) -> int:
     async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute('INSERT OR IGNORE INTO accounts (phone_number, session_string) VALUES (?, ?)', (phone_number, session_string))
+        cursor = await db.execute('INSERT OR IGNORE INTO accounts (phone_number, session_string) VALUES (?, ?)', (phone_number, session_string))
         await db.commit()
+        return cursor.lastrowid
 
 async def delete_account(account_id: int):
     async with aiosqlite.connect(DB_PATH) as db:
