@@ -1,18 +1,18 @@
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import asyncio
 
 from bot.database import db
 from bot.core.userbot import userbot_manager
 
 def get_main_keyboard():
-    keyboard = ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="📱 Nomer olish"), KeyboardButton(text="💰 Balans")],
-            [KeyboardButton(text="ℹ️ Ma'lumot")]
-        ],
-        resize_keyboard=True
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📱 Nomer olish", callback_data="user:get_number"),
+             InlineKeyboardButton(text="💰 Balans", callback_data="user:balance")],
+            [InlineKeyboardButton(text="ℹ️ Ma'lumot", callback_data="user:info")]
+        ]
     )
     return keyboard
 
@@ -24,15 +24,16 @@ async def start_command(message: types.Message):
         reply_markup=get_main_keyboard()
     )
 
-async def balance_handler(message: types.Message):
-    user = await db.get_user(message.from_user.id)
+async def balance_handler(callback_query: types.CallbackQuery):
+    user = await db.get_user(callback_query.from_user.id)
     if user:
-        await message.answer(
+        await callback_query.message.answer(
             f"💰 Sizning balansingiz: {user['balance']} so'm\n"
             f"🌟 Premium qilingan raqamlar: {user['premium_count']}"
         )
     else:
-        await message.answer("Siz ro'yxatdan o'tmagansiz. Iltimos /start bosing.")
+        await callback_query.message.answer("Siz ro'yxatdan o'tmagansiz. Iltimos /start bosing.")
+    await callback_query.answer()
 
 def create_inline_keyboard_from_source(source_markup) -> InlineKeyboardMarkup | None:
     if not source_markup or not source_markup.inline_keyboard:
@@ -50,16 +51,17 @@ def create_inline_keyboard_from_source(source_markup) -> InlineKeyboardMarkup | 
 
     return InlineKeyboardMarkup(inline_keyboard=inline_keyboard)
 
-async def get_number_handler(message: types.Message):
-    await message.answer("⏳ Raqam olinmoqda, kuting...")
+async def get_number_handler(callback_query: types.CallbackQuery):
+    await callback_query.message.answer("⏳ Raqam olinmoqda, kuting...")
+    await callback_query.answer()
 
-    response = await userbot_manager.request_number(message.from_user.id)
+    response = await userbot_manager.request_number(callback_query.from_user.id)
 
     if response:
         keyboard = create_inline_keyboard_from_source(response.get("reply_markup"))
-        await message.answer(response.get("text", "Raqam ma'lumotlari:"), reply_markup=keyboard)
+        await callback_query.message.answer(response.get("text", "Raqam ma'lumotlari:"), reply_markup=keyboard)
     else:
-        await message.answer("❌ Hozircha bo'sh raqamlar yo'q yoki manba bilan bog'lanishda xatolik yuz berdi.")
+        await callback_query.message.answer("❌ Hozircha bo'sh raqamlar yo'q yoki manba bilan bog'lanishda xatolik yuz berdi.")
 
 async def source_button_callback(callback_query: types.CallbackQuery):
     # Extract the button text that was pressed
@@ -88,8 +90,13 @@ async def source_button_callback(callback_query: types.CallbackQuery):
     else:
         await callback_query.message.edit_text("❌ Amaliyotni bajarishda xatolik yuz berdi.")
 
+async def info_handler(callback_query: types.CallbackQuery):
+    await callback_query.message.answer("Bu bot orqali manba botdan raqam olib, premium qilishingiz mumkin.")
+    await callback_query.answer()
+
 def register_user_handlers(dp: Dispatcher):
     dp.message.register(start_command, Command("start"))
-    dp.message.register(balance_handler, F.text == "💰 Balans")
-    dp.message.register(get_number_handler, F.text == "📱 Nomer olish")
+    dp.callback_query.register(balance_handler, F.data == "user:balance")
+    dp.callback_query.register(get_number_handler, F.data == "user:get_number")
+    dp.callback_query.register(info_handler, F.data == "user:info")
     dp.callback_query.register(source_button_callback, F.data.startswith("source_btn:"))
