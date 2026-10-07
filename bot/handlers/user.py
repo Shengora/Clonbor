@@ -39,10 +39,17 @@ async def start_command(message: types.Message):
 async def stats_handler(callback_query: types.CallbackQuery):
     user = await db.get_user(callback_query.from_user.id)
     if user:
+        # Calculate total numbers
+        total_numbers = user['premium_count'] + user['canceled_numbers'] + user['frozen_numbers']
+
         await callback_query.message.answer(
-            f"📊 Sizning statistikangiz:\n\n"
-            f"💰 Balans: {user['balance']} so'm\n"
-            f"🌟 Premium raqamlar: {user['premium_count']} ta"
+            f"📊 Your Personal Stats:\n\n"
+            f"📞 My Numbers (Total): {total_numbers}\n"
+            f"❌ Canceled Numbers: {user['canceled_numbers']}\n"
+            f"🧊 Frozen Numbers: {user['frozen_numbers']}\n"
+            f"📨 Codes received: {user['codes_received']}\n"
+            f"⭐ Premium numbers: {user['premium_count']}\n\n"
+            f"💰 Balans: {user['balance']} so'm"
         )
     else:
         await callback_query.message.answer("Siz ro'yxatdan o'tmagansiz. Iltimos /start bosing.")
@@ -114,7 +121,8 @@ async def source_button_callback(callback_query: types.CallbackQuery):
         await callback_query.message.edit_text(text, reply_markup=keyboard)
 
         # Check if premium was successfully activated
-        if "premium activated and counted" in text.lower():
+        lower_text = text.lower()
+        if "premium activated and counted" in lower_text:
             user_price_str = await db.get_setting('user_price')
             user_price = int(user_price_str) if user_price_str else 5000
 
@@ -123,6 +131,16 @@ async def source_button_callback(callback_query: types.CallbackQuery):
             await db.update_statistics(user_price)
 
             await callback_query.message.answer(f"🎉 Tabriklaymiz! Premium muvaffaqiyatli faollashtirildi.\n💰 Balansingizga {user_price} so'm qo'shildi.")
+
+        elif "cancel" in lower_text or "bekor qilindi" in lower_text:
+            await db.increment_user_canceled_numbers(callback_query.from_user.id)
+
+        elif "frozen" in lower_text or "muzlatildi" in lower_text:
+            await db.increment_user_frozen_numbers(callback_query.from_user.id)
+
+        elif "code" in lower_text or "kod:" in lower_text:
+            # Typically a code message might arrive as an update, but if it comes as a button response:
+            await db.increment_user_codes_received(callback_query.from_user.id)
     else:
         await callback_query.message.edit_text("❌ Amaliyotni bajarishda xatolik yuz berdi.")
 

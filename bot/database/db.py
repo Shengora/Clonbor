@@ -13,6 +13,9 @@ async def init_db():
                 telegram_id INTEGER UNIQUE,
                 balance INTEGER DEFAULT 0,
                 premium_count INTEGER DEFAULT 0,
+                canceled_numbers INTEGER DEFAULT 0,
+                frozen_numbers INTEGER DEFAULT 0,
+                codes_received INTEGER DEFAULT 0,
                 joined_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 state TEXT DEFAULT 'active'
             )
@@ -76,6 +79,21 @@ async def update_user_balance(telegram_id: int, amount: int):
 async def increment_user_premium_count(telegram_id: int):
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute('UPDATE users SET premium_count = premium_count + 1 WHERE telegram_id = ?', (telegram_id,))
+        await db.commit()
+
+async def increment_user_codes_received(telegram_id: int):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute('UPDATE users SET codes_received = codes_received + 1 WHERE telegram_id = ?', (telegram_id,))
+        await db.commit()
+
+async def increment_user_canceled_numbers(telegram_id: int):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute('UPDATE users SET canceled_numbers = canceled_numbers + 1 WHERE telegram_id = ?', (telegram_id,))
+        await db.commit()
+
+async def increment_user_frozen_numbers(telegram_id: int):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute('UPDATE users SET frozen_numbers = frozen_numbers + 1 WHERE telegram_id = ?', (telegram_id,))
         await db.commit()
 
 async def get_total_users_count():
