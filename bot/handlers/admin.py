@@ -5,7 +5,7 @@ import asyncio
 
 from bot.database import db
 from bot.core.config import ADMIN_IDS
-from bot.keyboards.inline import get_admin_panel_keyboard, get_accounts_keyboard, get_sources_keyboard
+from bot.keyboards.inline import get_admin_panel_keyboard, get_accounts_keyboard, get_sources_keyboard, get_back_to_main_keyboard
 from bot.handlers.fsm import AdminStates
 
 async def is_admin(user_id: int) -> bool:
@@ -58,20 +58,46 @@ async def admin_callback(callback_query: types.CallbackQuery, state: FSMContext)
         )
 
     elif action == "statistics":
-        today_stat = await db.get_today_statistics()
-        today_premium = today_stat['premium_count'] if today_stat else 0
-        today_spent = today_stat['total_spent'] if today_stat else 0
-        total_premium = await db.get_total_premium_count()
-        total_balance = await db.get_total_balance()
+        # Fetch individual users stats
+        users_stats = await db.get_all_users_stats(limit=50) # top 50
 
-        stat_text = (
-            f"📊 Statistika\n\n"
-            f"Bugungi premiumlar: {today_premium}\n"
-            f"Bugun to'langan: {today_spent} so'm\n\n"
-            f"Umumiy premiumlar: {total_premium}\n"
-            f"Foydalanuvchilardagi umumiy balans: {total_balance} so'm"
-        )
-        await callback_query.answer(stat_text, show_alert=True)
+        if not users_stats:
+            await callback_query.message.edit_text("Hali ro'yxatda foydalanuvchilar yo'q.", reply_markup=get_back_to_main_keyboard())
+            return
+
+        stat_text = "📊 <b>Foydalanuvchilar Statistikasi (Top 50)</b>\n\n"
+
+        for i, u in enumerate(users_stats, 1):
+            stat_text += (
+                f"👤 <b>{i}. ID:</b> <code>{u['telegram_id']}</code>\n"
+                f"   ⭐ Premium: {u['premium_count']} | 🧊 Muzlatilgan: {u['frozen_numbers']} | ❌ Bekor: {u['canceled_numbers']}\n\n"
+            )
+
+        await callback_query.message.edit_text(stat_text, reply_markup=get_back_to_main_keyboard(), parse_mode="HTML")
+
+    elif action == "broadcast":
+        await callback_query.message.answer("📣 Barcha foydalanuvchilarga yuboriladigan xabarni kiriting (yoki Bekor qilish tugmasini bosing):")
+        await state.set_state(AdminStates.waiting_for_broadcast_msg)
+        await callback_query.answer()
+
+    elif action == "change_balance":
+        await callback_query.message.answer("Hisobini o'zgartirmoqchi bo'lgan foydalanuvchining ID raqamini kiriting:")
+        await state.set_state(AdminStates.waiting_for_balance_user_id)
+        await callback_query.answer()
+
+    elif action == "user_price":
+        current_price = await db.get_setting("user_price")
+        await callback_query.message.answer(f"Joriy user narxi: {current_price} so'm.\nYangi narxni kiriting:")
+        await state.update_data(setting_key="user_price")
+        await state.set_state(AdminStates.waiting_for_setting_value)
+        await callback_query.answer()
+
+    elif action == "slot_limit":
+        current_limit = await db.get_setting("slot_limit")
+        await callback_query.message.answer(f"Joriy Slot Limit: {current_limit}.\nYangi limitni kiriting:")
+        await state.update_data(setting_key="slot_limit")
+        await state.set_state(AdminStates.waiting_for_setting_value)
+        await callback_query.answer()
 
     elif action == "toggle_number_status":
         current_status = await db.get_setting("number_status")
@@ -79,11 +105,6 @@ async def admin_callback(callback_query: types.CallbackQuery, state: FSMContext)
         await db.set_setting("number_status", new_status)
         status_text = "Yoqilgan" if new_status == "1" else "O'chirilgan"
         await callback_query.answer(f"Nomer berish statusi: {status_text}", show_alert=True)
-
-    elif action == "user_price":
-        current_price = await db.get_setting("user_price")
-        await callback_query.message.answer(f"Joriy user narxi: {current_price} so'm.\nO'zgartirish uchun hali alohida state yozilmagan (simulyatsiya).")
-        await callback_query.answer()
 
     elif action == "sources":
         await callback_query.message.edit_text(
@@ -116,7 +137,76 @@ async def set_new_source_bot(message: types.Message, state: FSMContext):
     await message.answer(f"Manba bot muvaffaqiyatli o'zgartirildi: {new_source}\nIltimos botni restart qiling, yangi filter ishlashi uchun.")
     await state.clear()
 
+async def process_broadcast(message: types.Message, state: FSMContext):
+    if not await is_admin(message.from_user.id):
+        return
+
+    users = await db.get_all_users()
+    count = 0
+    await message.answer("Yuborilmoqda...")
+    for u in users:
+        try:
+            await message.send_copy(chat_id=u['telegram_id'])
+            count += 1
+            await asyncio.sleep(0.05) # spam limit
+        except Exception:
+            pass
+
+    await message.answer(f"✅ Xabar {count} ta foydalanuvchiga muvaffaqiyatli yuborildi.")
+    await state.clear()
+
+async def process_balance_user_id(message: types.Message, state: FSMContext):
+    if not await is_admin(message.from_user.id):
+        return
+
+    try:
+        target_id = int(message.text.strip())
+        user = await db.get_user(target_id)
+        if not user:
+            await message.answer("❌ Bunday foydalanuvchi topilmadi.")
+            await state.clear()
+            return
+
+        await state.update_data(target_id=target_id, current_balance=user['balance'])
+        await message.answer(f"Foydalanuvchi balansi: {user['balance']} so'm\n\nQo'shish uchun musbat son (masalan: 10000) yoki ayirish uchun manfiy son (masalan: -5000) kiriting:")
+        await state.set_state(AdminStates.waiting_for_balance_amount)
+    except ValueError:
+        await message.answer("❌ ID raqamdan iborat bo'lishi kerak.")
+
+async def process_balance_amount(message: types.Message, state: FSMContext):
+    if not await is_admin(message.from_user.id):
+        return
+
+    try:
+        amount = int(message.text.strip())
+        data = await state.get_data()
+        target_id = data.get("target_id")
+
+        await db.update_user_balance(target_id, amount)
+        new_user = await db.get_user(target_id)
+
+        await message.answer(f"✅ Balans o'zgartirildi!\nYangi balans: {new_user['balance']} so'm.")
+        await state.clear()
+    except ValueError:
+        await message.answer("❌ Summa raqamdan iborat bo'lishi kerak.")
+
+async def process_setting_value(message: types.Message, state: FSMContext):
+    if not await is_admin(message.from_user.id):
+        return
+
+    value = message.text.strip()
+    data = await state.get_data()
+    setting_key = data.get("setting_key")
+
+    await db.set_setting(setting_key, value)
+    await message.answer(f"✅ Sozlama muvaffaqiyatli yangilandi: {setting_key} = {value}")
+    await state.clear()
+
 def register_admin_handlers(dp: Dispatcher):
     dp.message.register(admin_command, Command("admin"))
     dp.callback_query.register(admin_callback, F.data.startswith("admin:"))
     dp.message.register(set_new_source_bot, AdminStates.waiting_for_new_source)
+    dp.message.register(process_broadcast, AdminStates.waiting_for_broadcast_msg)
+    dp.message.register(process_balance_user_id, AdminStates.waiting_for_balance_user_id)
+    dp.message.register(process_balance_amount, AdminStates.waiting_for_balance_amount)
+    dp.message.register(process_setting_value, AdminStates.waiting_for_setting_value)

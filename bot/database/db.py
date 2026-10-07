@@ -17,7 +17,8 @@ async def init_db():
                 frozen_numbers INTEGER DEFAULT 0,
                 codes_received INTEGER DEFAULT 0,
                 joined_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                state TEXT DEFAULT 'active'
+                state TEXT DEFAULT 'active',
+                wallet TEXT
             )
         ''')
 
@@ -69,6 +70,12 @@ async def get_user(telegram_id: int):
         async with db.execute('SELECT * FROM users WHERE telegram_id = ?', (telegram_id,)) as cursor:
             return await cursor.fetchone()
 
+async def get_all_users():
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute('SELECT telegram_id FROM users') as cursor:
+            return await cursor.fetchall()
+
 async def add_user(telegram_id: int):
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute('INSERT OR IGNORE INTO users (telegram_id) VALUES (?)', (telegram_id,))
@@ -104,6 +111,29 @@ async def get_total_users_count():
         async with db.execute('SELECT COUNT(*) FROM users') as cursor:
             row = await cursor.fetchone()
             return row[0] if row else 0
+
+async def get_today_users_count():
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute("SELECT COUNT(*) FROM users WHERE date(joined_date) = date('now')") as cursor:
+            row = await cursor.fetchone()
+            return row[0] if row else 0
+
+async def get_all_users_stats(limit: int = 50):
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        # Faol foydalanuvchilarni ko'p premium olganidan boshlab tartiblash
+        async with db.execute('''
+            SELECT telegram_id, premium_count, frozen_numbers, canceled_numbers
+            FROM users
+            ORDER BY premium_count DESC
+            LIMIT ?
+        ''', (limit,)) as cursor:
+            return await cursor.fetchall()
+
+async def update_user_wallet(telegram_id: int, wallet: str):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute('UPDATE users SET wallet = ? WHERE telegram_id = ?', (wallet, telegram_id))
+        await db.commit()
 
 async def get_total_balance():
     async with aiosqlite.connect(DB_PATH) as db:
@@ -174,3 +204,27 @@ async def get_total_premium_count():
         async with db.execute('SELECT SUM(premium_count) FROM statistics') as cursor:
             row = await cursor.fetchone()
             return row[0] if row and row[0] else 0
+
+async def get_total_canceled_count():
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute('SELECT SUM(canceled_numbers) FROM users') as cursor:
+            row = await cursor.fetchone()
+            return row[0] if row and row[0] else 0
+
+async def get_total_frozen_count():
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute('SELECT SUM(frozen_numbers) FROM users') as cursor:
+            row = await cursor.fetchone()
+            return row[0] if row and row[0] else 0
+
+async def get_total_codes_received_count():
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute('SELECT SUM(codes_received) FROM users') as cursor:
+            row = await cursor.fetchone()
+            return row[0] if row and row[0] else 0
+
+async def get_active_accounts_count():
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute("SELECT COUNT(*) FROM accounts WHERE status = 'active'") as cursor:
+            row = await cursor.fetchone()
+            return row[0] if row else 0

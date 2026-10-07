@@ -59,13 +59,91 @@ async def help_handler(callback_query: types.CallbackQuery):
     await callback_query.message.answer("📞 Yordamchi bo'limiga xush kelibsiz.\n\nSavollaringiz bo'lsa yoki yordam kerak bo'lsa adminga murojaat qiling.")
     await callback_query.answer()
 
-async def withdraw_handler(callback_query: types.CallbackQuery):
-    await callback_query.message.answer("💸 Pul yechish bo'limi tez kunda ishga tushadi.")
+from aiogram.fsm.context import FSMContext
+from bot.handlers.fsm import UserStates
+from bot.core.config import ADMIN_IDS
+
+async def withdraw_handler(callback_query: types.CallbackQuery, state: FSMContext):
+    user = await db.get_user(callback_query.from_user.id)
+    if not user:
+        await callback_query.answer("Siz ro'yxatdan o'tmagansiz.", show_alert=True)
+        return
+
+    if user['balance'] < 15000:
+        await callback_query.answer(f"❌ Pul yechish uchun hisobingizda kamida 15000 so'm bo'lishi kerak.\nSizda: {user['balance']} so'm", show_alert=True)
+        return
+
+    if not user['wallet']:
+        await callback_query.answer("❌ Avval 'Mening kartalarim' bo'limidan karta yoki hamyon kiriting!", show_alert=True)
+        return
+
+    await callback_query.message.answer(
+        f"💸 Qancha pul yechmoqchisiz?\n"
+        f"Sizning balansingiz: {user['balance']} so'm\n"
+        f"Karta raqamingiz: {user['wallet']}\n\n"
+        f"Miqdorni raqamlarda kiriting:"
+    )
+    await state.set_state(UserStates.waiting_for_withdraw_amount)
     await callback_query.answer()
 
-async def cards_handler(callback_query: types.CallbackQuery):
-    await callback_query.message.answer("💳 Mening kartalarim bo'limi tez kunda ishga tushadi.")
+async def process_withdraw_amount(message: types.Message, state: FSMContext):
+    try:
+        amount = int(message.text.strip())
+    except ValueError:
+        await message.answer("❌ Iltimos, miqdorni faqat raqamlarda kiriting.")
+        return
+
+    user = await db.get_user(message.from_user.id)
+    if amount < 15000:
+        await message.answer("❌ Minimal pul yechish miqdori 15000 so'm.")
+        return
+
+    if amount > user['balance']:
+        await message.answer(f"❌ Hisobingizda yetarli mablag' yo'q. Maksimal yechish: {user['balance']} so'm.")
+        return
+
+    # Deduct balance and send to admin
+    await db.update_user_balance(message.from_user.id, -amount)
+    await message.answer("✅ Pul yechish so'rovingiz adminga yuborildi. Tez orada kartangizga tushirib beriladi.")
+
+    from bot.core.forwarder import forwarder
+    if forwarder.bot:
+        for admin_id in ADMIN_IDS:
+            try:
+                await forwarder.bot.send_message(
+                    admin_id,
+                    f"💸 <b>Yangi pul yechish so'rovi!</b>\n\n"
+                    f"👤 User ID: <code>{message.from_user.id}</code>\n"
+                    f"💳 Karta/Hamyon: <code>{user['wallet']}</code>\n"
+                    f"💰 Miqdor: <b>{amount} so'm</b>",
+                    parse_mode="HTML"
+                )
+            except Exception:
+                pass
+
+    await state.clear()
+
+
+async def cards_handler(callback_query: types.CallbackQuery, state: FSMContext):
+    user = await db.get_user(callback_query.from_user.id)
+    if not user:
+        await callback_query.answer("Siz ro'yxatdan o'tmagansiz.", show_alert=True)
+        return
+
+    current_wallet = user['wallet'] if user['wallet'] else "Yo'q"
+
+    await callback_query.message.answer(
+        f"💳 Hozirgi saqlangan karta/hamyon: {current_wallet}\n\n"
+        f"Yangi karta yoki crypto hamyon raqamini yuboring:"
+    )
+    await state.set_state(UserStates.waiting_for_wallet)
     await callback_query.answer()
+
+async def process_wallet(message: types.Message, state: FSMContext):
+    wallet = message.text.strip()
+    await db.update_user_wallet(message.from_user.id, wallet)
+    await message.answer(f"✅ Karta / Hamyon raqami saqlandi: {wallet}")
+    await state.clear()
 
 def create_inline_keyboard_from_source(source_markup) -> InlineKeyboardMarkup | None:
     if not source_markup or not source_markup.inline_keyboard:
@@ -155,6 +233,9 @@ def register_user_handlers(dp: Dispatcher):
     dp.message.register(start_command, Command("start"))
     dp.message.register(get_number_command, Command("getNumber"))
     dp.message.register(help_message_handler, F.text == "Yordamchi")
+
+    dp.message.register(process_wallet, UserStates.waiting_for_wallet)
+    dp.message.register(process_withdraw_amount, UserStates.waiting_for_withdraw_amount)
 
     dp.callback_query.register(stats_handler, F.data == "user:stats")
     dp.callback_query.register(help_handler, F.data == "user:help")

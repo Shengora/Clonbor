@@ -63,6 +63,11 @@ def get_sources_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="🔙 Orqaga", callback_data="admin:main")]
     ])
 
+def get_back_to_main_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔙 Orqaga", callback_data="admin:main")]
+    ])
+
 def get_accounts_keyboard(accounts) -> InlineKeyboardMarkup:
     buttons = []
     for acc in accounts:
