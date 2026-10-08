@@ -39,9 +39,6 @@ def get_admin_panel_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="Balansni o'zgartirish", callback_data="admin:change_balance")],
 
         # Row 10
-        [InlineKeyboardButton(text="Narx o'zgartirish", callback_data="admin:change_price")],
-
-        # Row 11
         [InlineKeyboardButton(text="Habarlarni o'chirish", callback_data="admin:delete_messages")],
 
         # Row 12
@@ -51,6 +48,9 @@ def get_admin_panel_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="User narxi", callback_data="admin:user_price")],
 
         # Row 14
+        [InlineKeyboardButton(text="Log Kanal", callback_data="admin:log_channel")],
+
+        # Row 15
         [InlineKeyboardButton(text="Manbalar", callback_data="admin:sources")]
     ])
 
@@ -73,6 +73,37 @@ def get_accounts_keyboard(accounts) -> InlineKeyboardMarkup:
     for acc in accounts:
         buttons.append([InlineKeyboardButton(text=f"{acc['phone_number']} ({acc['status']})", callback_data=f"admin:acc:{acc['id']}")])
     buttons.append([InlineKeyboardButton(text="➕ Akkaunt qo'shish", callback_data="admin:add_account")])
+    buttons.append([InlineKeyboardButton(text="🔙 Orqaga", callback_data="admin:main")])
+
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+def get_users_price_keyboard(users, current_page: int, total_pages: int) -> InlineKeyboardMarkup:
+    buttons = []
+
+    # Global price button at the top
+    buttons.append([InlineKeyboardButton(text="🌍 Barchaga umumiy narxni o'rnatish", callback_data="admin:global_price_set")])
+
+    # User buttons
+    for u in users:
+        uname = f"@{u['username']}" if u['username'] else f"{u['first_name']}"
+        try:
+            custom_price = u['custom_price']
+        except Exception:
+            custom_price = None
+        price_text = f"{custom_price} so'm" if custom_price is not None else "Umumiy narx"
+        btn_text = f"👤 {uname} - {price_text}"
+        buttons.append([InlineKeyboardButton(text=btn_text, callback_data=f"admin:set_user_price:{u['telegram_id']}")])
+
+    # Pagination
+    nav_buttons = []
+    if current_page > 0:
+        nav_buttons.append(InlineKeyboardButton(text="⬅️ Oldingi", callback_data=f"admin:user_price_page:{current_page-1}"))
+    if current_page < total_pages - 1:
+        nav_buttons.append(InlineKeyboardButton(text="Keyingi ➡️", callback_data=f"admin:user_price_page:{current_page+1}"))
+
+    if nav_buttons:
+        buttons.append(nav_buttons)
+
     buttons.append([InlineKeyboardButton(text="🔙 Orqaga", callback_data="admin:main")])
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)

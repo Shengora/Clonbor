@@ -101,10 +101,26 @@ async def admin_callback(callback_query: types.CallbackQuery, state: FSMContext)
         await callback_query.answer()
 
     elif action == "user_price":
+        await show_user_prices_page(callback_query.message, 0)
+        await callback_query.answer()
+
+    elif action.startswith("user_price_page:"):
+        page = int(action.split(":")[1])
+        await show_user_prices_page(callback_query.message, page, edit=True)
+        await callback_query.answer()
+
+    elif action == "global_price_set":
         current_price = await db.get_setting("user_price")
-        await callback_query.message.answer(f"Joriy user narxi: {current_price} so'm.\nYangi narxni kiriting:")
+        await callback_query.message.answer(f"Joriy umumiy narx: {current_price} so'm.\nYangi umumiy narxni kiriting:")
         await state.update_data(setting_key="user_price")
         await state.set_state(AdminStates.waiting_for_setting_value)
+        await callback_query.answer()
+
+    elif action.startswith("set_user_price:"):
+        target_user_id = int(action.split(":")[1])
+        await state.update_data(custom_price_user_id=target_user_id)
+        await callback_query.message.answer("Ushbu foydalanuvchi uchun maxsus narxni kiriting (yoki '0' yozing umumiy narxga o'tkazish uchun):")
+        await state.set_state(AdminStates.waiting_for_custom_price)
         await callback_query.answer()
 
     elif action == "slot_limit":
@@ -141,6 +157,13 @@ async def admin_callback(callback_query: types.CallbackQuery, state: FSMContext)
         text = f"Hozirgi kanallar:\n{current_channels}\n\nYangi kanallarni vergul bilan ajratib yozing (masalan: @kanal1, @kanal2). O'chirish uchun '0' yozing:"
         await callback_query.message.answer(text)
         await state.set_state(AdminStates.waiting_for_channel)
+        await callback_query.answer()
+
+    elif action == "log_channel":
+        current_log_channel = await db.get_setting("log_channel")
+        text = f"Hozirgi log kanal: {current_log_channel}\n\nYangi log kanal usernamesini yoki IDsini kiriting (masalan: @logkanal). O'chirish uchun '0' yozing:"
+        await callback_query.message.answer(text)
+        await state.set_state(AdminStates.waiting_for_log_channel)
         await callback_query.answer()
 
     elif action == "whitelist":
@@ -316,6 +339,19 @@ async def process_channel(message: types.Message, state: FSMContext):
         await message.answer(f"✅ Majburiy kanallar o'rnatildi: {value}")
     await state.clear()
 
+async def process_log_channel(message: types.Message, state: FSMContext):
+    if not await is_admin(message.from_user.id):
+        return
+
+    value = message.text.strip()
+    if value == '0':
+        await db.set_setting("log_channel", "")
+        await message.answer("✅ Log kanal o'chirildi.")
+    else:
+        await db.set_setting("log_channel", value)
+        await message.answer(f"✅ Log kanal o'rnatildi: {value}")
+    await state.clear()
+
 async def process_whitelist(message: types.Message, state: FSMContext):
     if not await is_admin(message.from_user.id):
         return
@@ -327,7 +363,8 @@ async def process_whitelist(message: types.Message, state: FSMContext):
             await message.answer("❌ Bunday foydalanuvchi topilmadi.")
         else:
             new_state = 'active' if user['state'] == 'whitelist' else 'whitelist'
-            async with db.aiosqlite.connect(db.DB_PATH) as database:
+            import aiosqlite
+            async with aiosqlite.connect(db.DB_PATH) as database:
                 await database.execute('UPDATE users SET state = ? WHERE telegram_id = ?', (new_state, target_id))
                 await database.commit()
             await message.answer(f"✅ Foydalanuvchi ({target_id}) statusi '{new_state}' qilib o'zgartirildi.")
@@ -346,13 +383,60 @@ async def process_blocklist(message: types.Message, state: FSMContext):
             await message.answer("❌ Bunday foydalanuvchi topilmadi.")
         else:
             new_state = 'active' if user['state'] == 'blocked' else 'blocked'
-            async with db.aiosqlite.connect(db.DB_PATH) as database:
+            import aiosqlite
+            async with aiosqlite.connect(db.DB_PATH) as database:
                 await database.execute('UPDATE users SET state = ? WHERE telegram_id = ?', (new_state, target_id))
                 await database.commit()
             await message.answer(f"✅ Foydalanuvchi ({target_id}) statusi '{new_state}' qilib o'zgartirildi.")
     except Exception as e:
         await message.answer("❌ Xatolik yuz berdi. ID raqam kiriting.")
     await state.clear()
+
+
+from bot.keyboards.inline import get_users_price_keyboard
+
+async def show_user_prices_page(message: types.Message, page: int, edit: bool = False):
+    users = await db.get_all_users()
+    per_page = 10
+    total_pages = (len(users) + per_page - 1) // per_page
+
+    if total_pages == 0:
+        total_pages = 1
+
+    start_idx = page * per_page
+    end_idx = start_idx + per_page
+    page_users = users[start_idx:end_idx]
+
+    keyboard = get_users_price_keyboard(page_users, page, total_pages)
+    text = f"👤 Foydalanuvchilar narxlari (Sahifa: {page + 1}/{total_pages})"
+
+    if edit:
+        await message.edit_text(text, reply_markup=keyboard)
+    else:
+        await message.answer(text, reply_markup=keyboard)
+
+async def process_custom_price(message: types.Message, state: FSMContext):
+    if not await is_admin(message.from_user.id):
+        return
+
+    try:
+        price = int(message.text.strip())
+        data = await state.get_data()
+        target_id = data.get("custom_price_user_id")
+
+        db_price = price if price > 0 else None
+
+        import aiosqlite
+        async with aiosqlite.connect(db.DB_PATH) as database:
+            await database.execute('UPDATE users SET custom_price = ? WHERE telegram_id = ?', (db_price, target_id))
+            await database.commit()
+
+        await message.answer("✅ Foydalanuvchi narxi muvaffaqiyatli o'zgartirildi.")
+        await state.clear()
+
+        await show_user_prices_page(message, 0)
+    except ValueError:
+        await message.answer("❌ Narx raqamdan iborat bo'lishi kerak.")
 
 def register_admin_handlers(dp: Dispatcher):
     dp.message.register(admin_command, Command("admin"))
@@ -363,5 +447,7 @@ def register_admin_handlers(dp: Dispatcher):
     dp.message.register(process_balance_amount, AdminStates.waiting_for_balance_amount)
     dp.message.register(process_setting_value, AdminStates.waiting_for_setting_value)
     dp.message.register(process_channel, AdminStates.waiting_for_channel)
+    dp.message.register(process_log_channel, AdminStates.waiting_for_log_channel)
     dp.message.register(process_whitelist, AdminStates.waiting_for_whitelist)
     dp.message.register(process_blocklist, AdminStates.waiting_for_blocklist)
+    dp.message.register(process_custom_price, AdminStates.waiting_for_custom_price)

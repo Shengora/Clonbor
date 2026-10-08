@@ -21,7 +21,8 @@ async def init_db():
                 codes_received INTEGER DEFAULT 0,
                 joined_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 state TEXT DEFAULT 'pending',
-                wallet TEXT
+                wallet TEXT,
+                custom_price INTEGER DEFAULT NULL
             )
         ''')
 
@@ -83,7 +84,7 @@ async def get_user(telegram_id: int):
 async def get_all_users():
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
-        async with db.execute('SELECT telegram_id FROM users') as cursor:
+        async with db.execute('SELECT * FROM users') as cursor:
             return await cursor.fetchall()
 
 async def add_user(telegram_id: int, first_name: str = None, last_name: str = None, username: str = None):

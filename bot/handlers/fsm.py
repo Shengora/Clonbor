@@ -12,8 +12,10 @@ class AdminStates(StatesGroup):
     waiting_for_balance_amount = State()
     waiting_for_setting_value = State()
     waiting_for_channel = State()
+    waiting_for_log_channel = State()
     waiting_for_whitelist = State()
     waiting_for_blocklist = State()
+    waiting_for_custom_price = State()
 
 class UserStates(StatesGroup):
     waiting_for_wallet = State()

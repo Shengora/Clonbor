@@ -253,6 +253,33 @@ async def can_request_number(user_id: int) -> tuple[bool, str]:
 
     return True, ""
 
+import re
+
+import html
+
+async def _log_number_to_channel(bot: Bot, user_id: int, user_info: str, response_text: str):
+    log_channel = await db.get_setting("log_channel")
+    if not log_channel:
+        return
+
+    try:
+        # Simple extraction of the phone number from the text if it contains one (most likely starts with +)
+        match = re.search(r'\+?\d{7,15}', response_text)
+        number_str = match.group(0) if match else "Noma'lum raqam"
+        safe_user_info = html.escape(user_info)
+
+        log_text = (
+            f"🟢 <b>Yangi raqam olindi!</b>\n\n"
+            f"👤 <b>Foydalanuvchi:</b> {safe_user_info}\n"
+            f"🆔 <b>ID:</b> <code>{user_id}</code>\n"
+            f"📞 <b>Raqam:</b> <code>{number_str}</code>\n"
+        )
+
+        await bot.send_message(chat_id=log_channel, text=log_text, parse_mode="HTML")
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Failed to log number to channel: {e}")
+
 async def get_number_command(message: types.Message, bot: Bot):
     if not await check_channels(message.from_user.id, bot):
         channels_str = await db.get_setting("channels")
@@ -269,8 +296,12 @@ async def get_number_command(message: types.Message, bot: Bot):
     response = await userbot_manager.request_number(message.from_user.id, msg.message_id)
 
     if response:
+        response_text = response.get("text", "Raqam ma'lumotlari:")
         keyboard = create_inline_keyboard_from_source(response.get("reply_markup"))
-        await msg.edit_text(response.get("text", "Raqam ma'lumotlari:"), reply_markup=keyboard)
+        await msg.edit_text(response_text, reply_markup=keyboard)
+
+        uname = f"@{message.from_user.username}" if message.from_user.username else message.from_user.first_name
+        await _log_number_to_channel(bot, message.from_user.id, uname, response_text)
     else:
         await msg.edit_text("❌ Hozircha bo'sh raqamlar yo'q yoki manba bilan bog'lanishda xatolik yuz berdi.")
 
@@ -290,8 +321,12 @@ async def get_number_handler(callback_query: types.CallbackQuery, bot: Bot):
     response = await userbot_manager.request_number(callback_query.from_user.id, msg.message_id)
 
     if response:
+        response_text = response.get("text", "Raqam ma'lumotlari:")
         keyboard = create_inline_keyboard_from_source(response.get("reply_markup"))
-        await msg.edit_text(response.get("text", "Raqam ma'lumotlari:"), reply_markup=keyboard)
+        await msg.edit_text(response_text, reply_markup=keyboard)
+
+        uname = f"@{callback_query.from_user.username}" if callback_query.from_user.username else callback_query.from_user.first_name
+        await _log_number_to_channel(bot, callback_query.from_user.id, uname, response_text)
     else:
         await msg.edit_text("❌ Hozircha bo'sh raqamlar yo'q yoki manba bilan bog'lanishda xatolik yuz berdi.")
 
@@ -304,8 +339,12 @@ async def handle_premium_stats(user_telegram_id: int, source_message_id: int, te
             return
         await db.mark_message_processed(source_message_id)
 
-        user_price_str = await db.get_setting('user_price')
-        user_price = int(user_price_str) if user_price_str else 5000
+        user = await db.get_user(user_telegram_id)
+        if user and user['custom_price'] is not None:
+            user_price = user['custom_price']
+        else:
+            user_price_str = await db.get_setting('user_price')
+            user_price = int(user_price_str) if user_price_str else 5000
 
         await db.update_user_balance(user_telegram_id, user_price)
         await db.increment_user_premium_count(user_telegram_id)
