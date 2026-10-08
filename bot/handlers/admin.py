@@ -32,7 +32,7 @@ async def admin_callback(callback_query: types.CallbackQuery, state: FSMContext)
     if not await is_admin(callback_query.from_user.id):
         return
 
-    action = callback_query.data.split(":")[1]
+    action = callback_query.data.split(":", 1)[1]
 
     if action == "main":
         total_users = await db.get_total_users_count()

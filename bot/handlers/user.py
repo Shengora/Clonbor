@@ -58,11 +58,13 @@ async def start_command(message: types.Message, bot: Bot):
             [InlineKeyboardButton(text="❌ Bloklash", callback_data=f"admin:block_user:{message.from_user.id}")]
         ])
 
+        username = f"@{message.from_user.username}" if message.from_user.username else "Yo'q"
+
         for admin_id in ADMIN_IDS:
             try:
                 await bot.send_message(
                     admin_id,
-                    f"👤 Yangi foydalanuvchi botga kirdi:\nID: {message.from_user.id}\nIsmi: {message.from_user.first_name}",
+                    f"👤 Yangi foydalanuvchi botga kirdi:\nID: {message.from_user.id}\nIsmi: {message.from_user.first_name}\nUsername: {username}",
                     reply_markup=admin_markup
                 )
             except Exception:

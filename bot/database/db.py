@@ -85,7 +85,7 @@ async def get_all_users():
 
 async def add_user(telegram_id: int):
     async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute('INSERT OR IGNORE INTO users (telegram_id) VALUES (?)', (telegram_id,))
+        await db.execute('INSERT OR IGNORE INTO users (telegram_id, state) VALUES (?, ?)', (telegram_id, 'pending'))
         await db.commit()
 
 async def update_user_balance(telegram_id: int, amount: int):
