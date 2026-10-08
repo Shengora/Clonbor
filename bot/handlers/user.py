@@ -25,8 +25,29 @@ def get_reply_keyboard():
         resize_keyboard=True
     )
 
-async def start_command(message: types.Message):
+async def check_channels(user_id: int, bot: Bot) -> bool:
+    channels_str = await db.get_setting("channels")
+    if not channels_str:
+        return True
+
+    channels = [c.strip() for c in channels_str.split(",") if c.strip()]
+    for channel in channels:
+        try:
+            member = await bot.get_chat_member(chat_id=channel, user_id=user_id)
+            if member.status in ['left', 'kicked']:
+                return False
+        except Exception:
+            # If bot is not admin in channel, we just assume false or ignore.
+            return False
+    return True
+
+async def start_command(message: types.Message, bot: Bot):
     await db.add_user(message.from_user.id)
+
+    if not await check_channels(message.from_user.id, bot):
+        channels_str = await db.get_setting("channels")
+        await message.answer(f"Iltimos, botdan foydalanish uchun quyidagi kanallarga obuna bo'ling:\n{channels_str}")
+        return
 
     await message.answer("🛠 Menyu:", reply_markup=get_reply_keyboard())
 
@@ -170,6 +191,10 @@ def create_inline_keyboard_from_source(source_markup) -> InlineKeyboardMarkup | 
     return InlineKeyboardMarkup(inline_keyboard=inline_keyboard)
 
 async def can_request_number(user_id: int) -> tuple[bool, str]:
+    user = await db.get_user(user_id)
+    if user and user['state'] == 'blocked':
+        return False, "❌ Siz bloklangansiz va raqam ololmaysiz."
+
     number_status = await db.get_setting("number_status")
     if number_status == "0":
         return False, "❌ Hozircha raqam berish vaqtincha to'xtatilgan."
@@ -177,14 +202,20 @@ async def can_request_number(user_id: int) -> tuple[bool, str]:
     slot_limit_str = await db.get_setting("slot_limit")
     if slot_limit_str:
         slot_limit = int(slot_limit_str)
-        user = await db.get_user(user_id)
         # Check if the user has requested more than their limit (based on successful premiums)
         if user and user['premium_count'] >= slot_limit:
-            return False, f"❌ Siz kunlik/umumiy raqam olish limitiga yetib keldingiz (Limit: {slot_limit})."
+            # Whitelisted users bypass the slot limit
+            if user['state'] != 'whitelist':
+                return False, f"❌ Siz kunlik/umumiy raqam olish limitiga yetib keldingiz (Limit: {slot_limit})."
 
     return True, ""
 
-async def get_number_command(message: types.Message):
+async def get_number_command(message: types.Message, bot: Bot):
+    if not await check_channels(message.from_user.id, bot):
+        channels_str = await db.get_setting("channels")
+        await message.answer(f"Iltimos, avval quyidagi kanallarga obuna bo'ling:\n{channels_str}")
+        return
+
     allowed, err_msg = await can_request_number(message.from_user.id)
     if not allowed:
         await message.answer(err_msg)
@@ -200,7 +231,11 @@ async def get_number_command(message: types.Message):
     else:
         await msg.edit_text("❌ Hozircha bo'sh raqamlar yo'q yoki manba bilan bog'lanishda xatolik yuz berdi.")
 
-async def get_number_handler(callback_query: types.CallbackQuery):
+async def get_number_handler(callback_query: types.CallbackQuery, bot: Bot):
+    if not await check_channels(callback_query.from_user.id, bot):
+        await callback_query.answer("Iltimos, avval kanallarga obuna bo'ling!", show_alert=True)
+        return
+
     allowed, err_msg = await can_request_number(callback_query.from_user.id)
     if not allowed:
         await callback_query.answer(err_msg, show_alert=True)

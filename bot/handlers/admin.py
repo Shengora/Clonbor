@@ -57,6 +57,20 @@ async def admin_callback(callback_query: types.CallbackQuery, state: FSMContext)
             reply_markup=get_accounts_keyboard(accounts)
         )
 
+    elif action.startswith("acc:"):
+        account_id = int(action.split(":")[1])
+        # Currently, just give an option to delete it
+        await db.delete_account(account_id)
+        from bot.core.userbot import userbot_manager
+        await userbot_manager.stop_account(account_id)
+        await callback_query.answer("Akkaunt o'chirildi va to'xtatildi.", show_alert=True)
+        # Refresh accounts list
+        accounts = await db.get_all_accounts()
+        await callback_query.message.edit_text(
+            "Mavjud akkauntlar (Userbotlar):",
+            reply_markup=get_accounts_keyboard(accounts)
+        )
+
     elif action == "statistics":
         # Fetch individual users stats
         users_stats = await db.get_all_users_stats(limit=50) # top 50
@@ -121,8 +135,48 @@ async def admin_callback(callback_query: types.CallbackQuery, state: FSMContext)
         await state.set_state(AdminStates.waiting_for_new_source)
         await callback_query.answer()
 
+    elif action == "channels":
+        current_channels = await db.get_setting("channels")
+        text = f"Hozirgi kanallar:\n{current_channels}\n\nYangi kanallarni vergul bilan ajratib yozing (masalan: @kanal1, @kanal2). O'chirish uchun '0' yozing:"
+        await callback_query.message.answer(text)
+        await state.set_state(AdminStates.waiting_for_channel)
+        await callback_query.answer()
+
+    elif action == "whitelist":
+        await callback_query.message.answer("Whitelistga qo'shish yoki olib tashlash uchun foydalanuvchi ID sini kiriting:")
+        await state.set_state(AdminStates.waiting_for_whitelist)
+        await callback_query.answer()
+
+    elif action == "blocklist":
+        await callback_query.message.answer("Bloklash yoki blokdan chiqarish uchun foydalanuvchi ID sini kiriting:")
+        await state.set_state(AdminStates.waiting_for_blocklist)
+        await callback_query.answer()
+
+    elif action == "unstable_numbers":
+        await callback_query.message.answer("Beqaror raqamlar ro'yxati hozircha mavjud emas. (Loglarni tekshiring)")
+        await callback_query.answer()
+
+    elif action == "download_stat":
+        users_stats = await db.get_all_users_stats(limit=99999)
+        if not users_stats:
+            await callback_query.answer("Ma'lumotlar yo'q.", show_alert=True)
+            return
+
+        csv_text = "TelegramID,Premium,Frozen,Canceled\n"
+        for u in users_stats:
+            csv_text += f"{u['telegram_id']},{u['premium_count']},{u['frozen_numbers']},{u['canceled_numbers']}\n"
+
+        from aiogram.types import BufferedInputFile
+        file = BufferedInputFile(csv_text.encode('utf-8'), filename="users_stats.csv")
+        await callback_query.message.answer_document(document=file, caption="Foydalanuvchilar statistikasi")
+        await callback_query.answer()
+
+    elif action == "delete_messages":
+        await callback_query.message.delete()
+        await callback_query.answer("Bosh menyu xabari o'chirildi.")
+
     else:
-        await callback_query.answer("Bu bo'lim hali to'liq ishga tushirilmagan.", show_alert=True)
+        await callback_query.answer("Kechirasiz, xatolik yuz berdi.", show_alert=True)
 
 async def set_new_source_bot(message: types.Message, state: FSMContext):
     if not await is_admin(message.from_user.id):
@@ -202,6 +256,57 @@ async def process_setting_value(message: types.Message, state: FSMContext):
     await message.answer(f"✅ Sozlama muvaffaqiyatli yangilandi: {setting_key} = {value}")
     await state.clear()
 
+async def process_channel(message: types.Message, state: FSMContext):
+    if not await is_admin(message.from_user.id):
+        return
+
+    value = message.text.strip()
+    if value == '0':
+        await db.set_setting("channels", "")
+        await message.answer("✅ Majburiy kanallar o'chirildi.")
+    else:
+        await db.set_setting("channels", value)
+        await message.answer(f"✅ Majburiy kanallar o'rnatildi: {value}")
+    await state.clear()
+
+async def process_whitelist(message: types.Message, state: FSMContext):
+    if not await is_admin(message.from_user.id):
+        return
+
+    try:
+        target_id = int(message.text.strip())
+        user = await db.get_user(target_id)
+        if not user:
+            await message.answer("❌ Bunday foydalanuvchi topilmadi.")
+        else:
+            new_state = 'active' if user['state'] == 'whitelist' else 'whitelist'
+            async with db.aiosqlite.connect(db.DB_PATH) as database:
+                await database.execute('UPDATE users SET state = ? WHERE telegram_id = ?', (new_state, target_id))
+                await database.commit()
+            await message.answer(f"✅ Foydalanuvchi ({target_id}) statusi '{new_state}' qilib o'zgartirildi.")
+    except Exception as e:
+        await message.answer("❌ Xatolik yuz berdi. ID raqam kiriting.")
+    await state.clear()
+
+async def process_blocklist(message: types.Message, state: FSMContext):
+    if not await is_admin(message.from_user.id):
+        return
+
+    try:
+        target_id = int(message.text.strip())
+        user = await db.get_user(target_id)
+        if not user:
+            await message.answer("❌ Bunday foydalanuvchi topilmadi.")
+        else:
+            new_state = 'active' if user['state'] == 'blocked' else 'blocked'
+            async with db.aiosqlite.connect(db.DB_PATH) as database:
+                await database.execute('UPDATE users SET state = ? WHERE telegram_id = ?', (new_state, target_id))
+                await database.commit()
+            await message.answer(f"✅ Foydalanuvchi ({target_id}) statusi '{new_state}' qilib o'zgartirildi.")
+    except Exception as e:
+        await message.answer("❌ Xatolik yuz berdi. ID raqam kiriting.")
+    await state.clear()
+
 def register_admin_handlers(dp: Dispatcher):
     dp.message.register(admin_command, Command("admin"))
     dp.callback_query.register(admin_callback, F.data.startswith("admin:"))
@@ -210,3 +315,6 @@ def register_admin_handlers(dp: Dispatcher):
     dp.message.register(process_balance_user_id, AdminStates.waiting_for_balance_user_id)
     dp.message.register(process_balance_amount, AdminStates.waiting_for_balance_amount)
     dp.message.register(process_setting_value, AdminStates.waiting_for_setting_value)
+    dp.message.register(process_channel, AdminStates.waiting_for_channel)
+    dp.message.register(process_whitelist, AdminStates.waiting_for_whitelist)
+    dp.message.register(process_blocklist, AdminStates.waiting_for_blocklist)

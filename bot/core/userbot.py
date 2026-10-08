@@ -100,6 +100,15 @@ class UserbotManager:
         for account in accounts:
             await self.start_account(account['id'], account['session_string'])
 
+    async def stop_account(self, account_id: int):
+        client = self.clients.get(account_id)
+        if client:
+            try:
+                await client.stop()
+            except Exception as e:
+                logger.error(f"Error stopping client {account_id}: {e}")
+            self.clients.pop(account_id, None)
+
     async def stop_all(self):
         for client in self.clients.values():
             await client.stop()
