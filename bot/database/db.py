@@ -17,7 +17,7 @@ async def init_db():
                 frozen_numbers INTEGER DEFAULT 0,
                 codes_received INTEGER DEFAULT 0,
                 joined_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                state TEXT DEFAULT 'active',
+                state TEXT DEFAULT 'pending',
                 wallet TEXT
             )
         ''')
@@ -247,3 +247,10 @@ async def get_active_accounts_count():
         async with db.execute("SELECT COUNT(*) FROM accounts WHERE status = 'active'") as cursor:
             row = await cursor.fetchone()
             return row[0] if row else 0
+
+async def reset_all_statistics():
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute('UPDATE users SET premium_count = 0, canceled_numbers = 0, frozen_numbers = 0, codes_received = 0, balance = 0')
+        await db.execute('DELETE FROM statistics')
+        await db.execute('DELETE FROM processed_messages')
+        await db.commit()

@@ -42,7 +42,41 @@ async def check_channels(user_id: int, bot: Bot) -> bool:
     return True
 
 async def start_command(message: types.Message, bot: Bot):
+    # Oldin bazada bormi yo'qligini tekshiramiz
+    user = await db.get_user(message.from_user.id)
+    is_new = user is None
+
     await db.add_user(message.from_user.id)
+
+    if is_new:
+        await message.answer("⏳ Ariza yuborildi. Administrator tasdig'i kutilmoqda...")
+
+        # Adminga yuborish
+        from bot.core.config import ADMIN_IDS
+        admin_markup = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="✅ Tasdiqlash", callback_data=f"admin:approve_user:{message.from_user.id}")],
+            [InlineKeyboardButton(text="❌ Bloklash", callback_data=f"admin:block_user:{message.from_user.id}")]
+        ])
+
+        for admin_id in ADMIN_IDS:
+            try:
+                await bot.send_message(
+                    admin_id,
+                    f"👤 Yangi foydalanuvchi botga kirdi:\nID: {message.from_user.id}\nIsmi: {message.from_user.first_name}",
+                    reply_markup=admin_markup
+                )
+            except Exception:
+                pass
+        return
+
+    user = await db.get_user(message.from_user.id)
+    if user and user['state'] == 'pending':
+        await message.answer("⏳ Administrator tasdig'i kutilmoqda...")
+        return
+
+    if user and user['state'] == 'blocked':
+        await message.answer("❌ Siz bloklangansiz.")
+        return
 
     if not await check_channels(message.from_user.id, bot):
         channels_str = await db.get_setting("channels")
@@ -192,6 +226,8 @@ def create_inline_keyboard_from_source(source_markup) -> InlineKeyboardMarkup | 
 
 async def can_request_number(user_id: int) -> tuple[bool, str]:
     user = await db.get_user(user_id)
+    if not user or user['state'] == 'pending':
+        return False, "⏳ Administrator tasdig'i kutilmoqda..."
     if user and user['state'] == 'blocked':
         return False, "❌ Siz bloklangansiz va raqam ololmaysiz."
 

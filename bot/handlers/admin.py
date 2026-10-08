@@ -171,9 +171,55 @@ async def admin_callback(callback_query: types.CallbackQuery, state: FSMContext)
         await callback_query.message.answer_document(document=file, caption="Foydalanuvchilar statistikasi")
         await callback_query.answer()
 
+    elif action == "resetall":
+        await db.reset_all_statistics()
+        await callback_query.answer("Barcha statistika muvaffaqiyatli 0 ga tushirildi!", show_alert=True)
+        # Bosh sahifaga qaytamiz
+        total_users = await db.get_total_users_count()
+        total_premium = await db.get_total_premium_count()
+        slot_limit = await db.get_setting("slot_limit")
+        text = (
+            f"👑 Admin Panel\n\n"
+            f"👥 Jami obunachilar: {total_users}\n"
+            f"⭐ Jami premium: {total_premium}\n"
+            f"🆔 Slot limit: {slot_limit}"
+        )
+        await callback_query.message.edit_text(text, reply_markup=get_admin_panel_keyboard())
+
     elif action == "delete_messages":
         await callback_query.message.delete()
         await callback_query.answer("Bosh menyu xabari o'chirildi.")
+
+    # Yangi foydalanuvchini tasdiqlash tugmalari
+    elif action.startswith("approve_user:"):
+        user_id = int(action.split(":")[1])
+        import aiosqlite
+        async with aiosqlite.connect(db.DB_PATH) as database:
+            await database.execute('UPDATE users SET state = ? WHERE telegram_id = ?', ('active', user_id))
+            await database.commit()
+        await callback_query.answer("Foydalanuvchi tasdiqlandi!", show_alert=True)
+        from bot.core.forwarder import forwarder
+        if forwarder.bot:
+            try:
+                await forwarder.bot.send_message(user_id, "✅ Sizning arizangiz admin tomonidan tasdiqlandi! Endi botdan to'liq foydalanishingiz mumkin. /start ni bosing.")
+            except Exception:
+                pass
+        await callback_query.message.delete()
+
+    elif action.startswith("block_user:"):
+        user_id = int(action.split(":")[1])
+        import aiosqlite
+        async with aiosqlite.connect(db.DB_PATH) as database:
+            await database.execute('UPDATE users SET state = ? WHERE telegram_id = ?', ('blocked', user_id))
+            await database.commit()
+        await callback_query.answer("Foydalanuvchi bloklandi!", show_alert=True)
+        from bot.core.forwarder import forwarder
+        if forwarder.bot:
+            try:
+                await forwarder.bot.send_message(user_id, "❌ Kechirasiz, sizning botdan foydalanish arizangiz admin tomonidan rad etildi.")
+            except Exception:
+                pass
+        await callback_query.message.delete()
 
     else:
         await callback_query.answer("Kechirasiz, xatolik yuz berdi.", show_alert=True)
