@@ -39,6 +39,13 @@ async def init_db():
         ''')
 
         await db.execute('''
+            CREATE TABLE IF NOT EXISTS processed_messages (
+                source_message_id INTEGER PRIMARY KEY,
+                processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        await db.execute('''
             CREATE TABLE IF NOT EXISTS statistics (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 date DATE DEFAULT CURRENT_DATE UNIQUE,
@@ -140,6 +147,18 @@ async def get_total_balance():
         async with db.execute('SELECT SUM(balance) FROM users') as cursor:
             row = await cursor.fetchone()
             return row[0] if row and row[0] else 0
+
+# --- Processed Messages ---
+async def is_message_processed(source_message_id: int) -> bool:
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute('SELECT 1 FROM processed_messages WHERE source_message_id = ?', (source_message_id,)) as cursor:
+            row = await cursor.fetchone()
+            return bool(row)
+
+async def mark_message_processed(source_message_id: int):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute('INSERT OR IGNORE INTO processed_messages (source_message_id) VALUES (?)', (source_message_id,))
+        await db.commit()
 
 # --- Settings ---
 async def get_setting(key: str):

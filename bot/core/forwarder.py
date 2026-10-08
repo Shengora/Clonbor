@@ -11,7 +11,7 @@ class Forwarder:
     def set_bot(self, bot: Bot):
         self.bot = bot
 
-    async def forward_edit(self, user_telegram_id: int, user_message_id: int, new_text: str, reply_markup):
+    async def forward_edit(self, user_telegram_id: int, user_message_id: int, source_message_id: int, new_text: str, reply_markup):
         if not self.bot:
             return
 
@@ -29,7 +29,7 @@ class Forwarder:
             )
 
             # Process stats (e.g. premium activated, canceled)
-            await handle_premium_stats(user_telegram_id, new_text)
+            await handle_premium_stats(user_telegram_id, source_message_id, new_text)
 
         except Exception as e:
             # We might hit Message is not modified, which is fine

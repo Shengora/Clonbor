@@ -145,6 +145,11 @@ async def process_wallet(message: types.Message, state: FSMContext):
     await message.answer(f"✅ Karta / Hamyon raqami saqlandi: {wallet}")
     await state.clear()
 
+import hashlib
+
+# Memory mapping to avoid 64-byte callback_data limits in Telegram API
+callback_data_store = {}
+
 def create_inline_keyboard_from_source(source_markup) -> InlineKeyboardMarkup | None:
     if not source_markup or not source_markup.inline_keyboard:
         return None
@@ -154,14 +159,37 @@ def create_inline_keyboard_from_source(source_markup) -> InlineKeyboardMarkup | 
         new_row = []
         for button in row:
             # We map source button text to our callback data
-            # Keep it simple: use text as callback data
-            callback_data = f"source_btn:{button.text}"
+            # Hash it to prevent ButtonDataInvalid (Telegram 64 byte limit)
+            btn_hash = hashlib.md5(button.text.encode()).hexdigest()[:16]
+            callback_data_store[btn_hash] = button.text
+
+            callback_data = f"src_btn:{btn_hash}"
             new_row.append(InlineKeyboardButton(text=button.text, callback_data=callback_data))
         inline_keyboard.append(new_row)
 
     return InlineKeyboardMarkup(inline_keyboard=inline_keyboard)
 
+async def can_request_number(user_id: int) -> tuple[bool, str]:
+    number_status = await db.get_setting("number_status")
+    if number_status == "0":
+        return False, "❌ Hozircha raqam berish vaqtincha to'xtatilgan."
+
+    slot_limit_str = await db.get_setting("slot_limit")
+    if slot_limit_str:
+        slot_limit = int(slot_limit_str)
+        user = await db.get_user(user_id)
+        # Check if the user has requested more than their limit (based on successful premiums)
+        if user and user['premium_count'] >= slot_limit:
+            return False, f"❌ Siz kunlik/umumiy raqam olish limitiga yetib keldingiz (Limit: {slot_limit})."
+
+    return True, ""
+
 async def get_number_command(message: types.Message):
+    allowed, err_msg = await can_request_number(message.from_user.id)
+    if not allowed:
+        await message.answer(err_msg)
+        return
+
     msg = await message.answer("⏳ Raqam olinmoqda, kuting...")
 
     response = await userbot_manager.request_number(message.from_user.id, msg.message_id)
@@ -173,6 +201,11 @@ async def get_number_command(message: types.Message):
         await msg.edit_text("❌ Hozircha bo'sh raqamlar yo'q yoki manba bilan bog'lanishda xatolik yuz berdi.")
 
 async def get_number_handler(callback_query: types.CallbackQuery):
+    allowed, err_msg = await can_request_number(callback_query.from_user.id)
+    if not allowed:
+        await callback_query.answer(err_msg, show_alert=True)
+        return
+
     msg = await callback_query.message.answer("⏳ Raqam olinmoqda, kuting...")
     await callback_query.answer()
 
@@ -184,15 +217,18 @@ async def get_number_handler(callback_query: types.CallbackQuery):
     else:
         await msg.edit_text("❌ Hozircha bo'sh raqamlar yo'q yoki manba bilan bog'lanishda xatolik yuz berdi.")
 
-async def handle_premium_stats(user_telegram_id: int, text: str):
+async def handle_premium_stats(user_telegram_id: int, source_message_id: int, text: str):
     lower_text = text.lower()
 
     if "premium activated and counted" in lower_text:
+        # Prevent double-spending
+        if await db.is_message_processed(source_message_id):
+            return
+        await db.mark_message_processed(source_message_id)
+
         user_price_str = await db.get_setting('user_price')
         user_price = int(user_price_str) if user_price_str else 5000
 
-        # Prevent double-spending: check if this specific text was already processed (a more robust DB state could be used here)
-        # For simplicity, we just increment. (In a real app, track source_message_id)
         await db.update_user_balance(user_telegram_id, user_price)
         await db.increment_user_premium_count(user_telegram_id)
         await db.update_statistics(user_price)
@@ -202,16 +238,26 @@ async def handle_premium_stats(user_telegram_id: int, text: str):
             await forwarder.bot.send_message(user_telegram_id, f"🎉 Tabriklaymiz! Premium muvaffaqiyatli faollashtirildi.\n💰 Balansingizga {user_price} so'm qo'shildi.")
 
     elif "cancel" in lower_text or "bekor qilindi" in lower_text:
-        await db.increment_user_canceled_numbers(user_telegram_id)
+        if not await db.is_message_processed(source_message_id):
+            await db.mark_message_processed(source_message_id)
+            await db.increment_user_canceled_numbers(user_telegram_id)
 
     elif "frozen" in lower_text or "muzlatildi" in lower_text:
-        await db.increment_user_frozen_numbers(user_telegram_id)
+        if not await db.is_message_processed(source_message_id):
+            await db.mark_message_processed(source_message_id)
+            await db.increment_user_frozen_numbers(user_telegram_id)
 
     elif "code" in lower_text or "kod:" in lower_text:
+        # We don't mark 'code' as fully processed because it might be followed by 'premium activated' later on the same message
         await db.increment_user_codes_received(user_telegram_id)
 
 async def source_button_callback(callback_query: types.CallbackQuery):
-    button_text = callback_query.data.split(":", 1)[1]
+    btn_hash = callback_query.data.split(":", 1)[1]
+    button_text = callback_data_store.get(btn_hash)
+
+    if not button_text:
+        await callback_query.answer("❌ Tugma muddati tugagan.", show_alert=True)
+        return
 
     # We don't block and wait. We just send the press action to Pyrogram.
     success = await userbot_manager.press_inline_button(callback_query.from_user.id, button_text)
@@ -244,4 +290,4 @@ def register_user_handlers(dp: Dispatcher):
 
     dp.callback_query.register(get_number_handler, F.data == "user:get_number")
     dp.callback_query.register(info_handler, F.data == "user:info")
-    dp.callback_query.register(source_button_callback, F.data.startswith("source_btn:"))
+    dp.callback_query.register(source_button_callback, F.data.startswith("src_btn:"))

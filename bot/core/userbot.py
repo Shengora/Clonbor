@@ -34,8 +34,11 @@ class UserbotManager:
         # active_requests now used just for the initial wait loop.
         self.active_requests: dict[int, dict] = {}
 
-        self.response_events = defaultdict(asyncio.Event)
-        self.response_data = {}
+        # For tracking individual user requests without race conditions
+        # Maps user_telegram_id -> asyncio.Future
+        self.pending_requests: dict[int, asyncio.Future] = {}
+
+        self.client_locks = defaultdict(asyncio.Lock)
 
 
     async def _get_active_source(self):
@@ -58,8 +61,11 @@ class UserbotManager:
 
         @client.on_message(source_filter)
         async def handle_source_message(c: Client, m: Message):
-            self.response_data[c.name] = m
-            self.response_events[c.name].set()
+            # Resolve the first waiting future
+            for user_id, future in list(self.pending_requests.items()):
+                if not future.done():
+                    future.set_result(m)
+                    break
 
         @client.on_edited_message(source_filter)
         async def handle_edited_source_message(c: Client, m: Message):
@@ -70,6 +76,7 @@ class UserbotManager:
                 await forwarder.forward_edit(
                     user_telegram_id=route["user_telegram_id"],
                     user_message_id=route["user_message_id"],
+                    source_message_id=m.id,
                     new_text=m.text,
                     reply_markup=m.reply_markup
                 )
@@ -102,37 +109,49 @@ class UserbotManager:
             logger.error("No active userbots available.")
             return None
 
-        # Simplistic approach for now: grab the first available client.
         client_id, client = next(iter(self.clients.items()))
 
-        self.response_events[client.name].clear()
+        future = asyncio.get_event_loop().create_future()
+        self.pending_requests[user_telegram_id] = future
 
-        try:
-            msg = await client.send_message(await self._get_active_source(), "/getNumber")
-
-            # Wait for the event to be set by the message handler
+        async with self.client_locks[client.name]:
             try:
-                await asyncio.wait_for(self.response_events[client.name].wait(), timeout=10.0)
-            except asyncio.TimeoutError:
+                active_source = await self._get_active_source()
+                logger.info(f"Sending /getNumber to {active_source} via {client.name}")
+
+                # Send the request
+                msg = await asyncio.wait_for(client.send_message(active_source, "/getNumber"), timeout=5.0)
+                logger.info(f"Successfully sent /getNumber, waiting for reply...")
+
+                # Wait for the future to be resolved by the message handler
+                try:
+                    response = await asyncio.wait_for(future, timeout=10.0)
+                except asyncio.TimeoutError:
+                    logger.warning(f"Timeout waiting for response from {active_source}")
+                    return None
+                finally:
+                    self.pending_requests.pop(user_telegram_id, None)
+
+                if response and response.id > msg.id:
+                    self.active_requests[user_telegram_id] = {
+                        "client_id": client_id,
+                        "source_message_id": response.id
+                    }
+                    # Register route so background edits flow back to the user
+                    self.routing_table[response.id] = {
+                        "user_telegram_id": user_telegram_id,
+                        "user_message_id": user_message_id
+                    }
+                    return {"text": response.text, "reply_markup": response.reply_markup}
                 return None
-
-            response = self.response_data.get(client.name)
-
-            if response and response.id > msg.id:
-                self.active_requests[user_telegram_id] = {
-                    "client_id": client_id,
-                    "source_message_id": response.id
-                }
-                # Register route so background edits flow back to the user
-                self.routing_table[response.id] = {
-                    "user_telegram_id": user_telegram_id,
-                    "user_message_id": user_message_id
-                }
-                return {"text": response.text, "reply_markup": response.reply_markup}
-            return None
-        except Exception as e:
-            logger.error(f"Error requesting number: {e}")
-            return None
+            except asyncio.TimeoutError:
+                logger.error("Timeout: Failed to send /getNumber (Connection might be dead)")
+                self.pending_requests.pop(user_telegram_id, None)
+                return None
+            except Exception as e:
+                logger.error(f"Error requesting number: {e}")
+                self.pending_requests.pop(user_telegram_id, None)
+                return None
 
     async def press_inline_button(self, user_telegram_id: int, button_data: str) -> bool:
         request_info = self.active_requests.get(user_telegram_id)
