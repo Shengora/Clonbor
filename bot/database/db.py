@@ -11,6 +11,9 @@ async def init_db():
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 telegram_id INTEGER UNIQUE,
+                first_name TEXT,
+                last_name TEXT,
+                username TEXT,
                 balance INTEGER DEFAULT 0,
                 premium_count INTEGER DEFAULT 0,
                 canceled_numbers INTEGER DEFAULT 0,
@@ -83,9 +86,16 @@ async def get_all_users():
         async with db.execute('SELECT telegram_id FROM users') as cursor:
             return await cursor.fetchall()
 
-async def add_user(telegram_id: int):
+async def add_user(telegram_id: int, first_name: str = None, last_name: str = None, username: str = None):
     async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute('INSERT OR IGNORE INTO users (telegram_id, state) VALUES (?, ?)', (telegram_id, 'pending'))
+        await db.execute('''
+            INSERT OR IGNORE INTO users (telegram_id, first_name, last_name, username, state)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (telegram_id, first_name, last_name, username, 'pending'))
+        # Update existing user details just in case they changed username
+        await db.execute('''
+            UPDATE users SET first_name = ?, last_name = ?, username = ? WHERE telegram_id = ?
+        ''', (first_name, last_name, username, telegram_id))
         await db.commit()
 
 async def update_user_balance(telegram_id: int, amount: int):
@@ -130,7 +140,7 @@ async def get_all_users_stats(limit: int = 50):
         db.row_factory = aiosqlite.Row
         # Faol foydalanuvchilarni ko'p premium olganidan boshlab tartiblash
         async with db.execute('''
-            SELECT telegram_id, premium_count, frozen_numbers, canceled_numbers
+            SELECT telegram_id, username, first_name, premium_count, frozen_numbers, canceled_numbers
             FROM users
             ORDER BY premium_count DESC
             LIMIT ?

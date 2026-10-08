@@ -46,7 +46,12 @@ async def start_command(message: types.Message, bot: Bot):
     user = await db.get_user(message.from_user.id)
     is_new = user is None
 
-    await db.add_user(message.from_user.id)
+    await db.add_user(
+        message.from_user.id,
+        first_name=message.from_user.first_name,
+        last_name=message.from_user.last_name,
+        username=message.from_user.username
+    )
 
     if is_new:
         await message.answer("⏳ Ariza yuborildi. Administrator tasdig'i kutilmoqda...")

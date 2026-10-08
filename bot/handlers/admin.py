@@ -82,8 +82,9 @@ async def admin_callback(callback_query: types.CallbackQuery, state: FSMContext)
         stat_text = "📊 <b>Foydalanuvchilar Statistikasi (Top 50)</b>\n\n"
 
         for i, u in enumerate(users_stats, 1):
+            uname = f" (@{u['username']})" if u['username'] else ""
             stat_text += (
-                f"👤 <b>{i}. ID:</b> <code>{u['telegram_id']}</code>\n"
+                f"👤 <b>{i}. ID:</b> <code>{u['telegram_id']}</code>{uname}\n"
                 f"   ⭐ Premium: {u['premium_count']} | 🧊 Muzlatilgan: {u['frozen_numbers']} | ❌ Bekor: {u['canceled_numbers']}\n\n"
             )
 
