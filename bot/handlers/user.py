@@ -9,10 +9,10 @@ from bot.core.userbot import userbot_manager
 def get_main_keyboard():
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="🔵 My Stats", callback_data="user:stats")],
-            [InlineKeyboardButton(text="🟢 Yordamchi", callback_data="user:help")],
-            [InlineKeyboardButton(text="🟢 Pul yechish", callback_data="user:withdraw")],
-            [InlineKeyboardButton(text="🔵 Mening kartalarim", callback_data="user:cards")]
+            [InlineKeyboardButton(text="My Stats", callback_data="user:stats", style="primary")],
+            [InlineKeyboardButton(text="Yordamchi", callback_data="user:help", style="success")],
+            [InlineKeyboardButton(text="Pul yechish", callback_data="user:withdraw", style="success")],
+            [InlineKeyboardButton(text="Mening kartalarim", callback_data="user:cards", style="primary")]
         ]
     )
     return keyboard
@@ -59,8 +59,8 @@ async def start_command(message: types.Message, bot: Bot):
         # Adminga yuborish
         from bot.core.config import ADMIN_IDS
         admin_markup = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🟢 Tasdiqlash", callback_data=f"admin:approve_user:{message.from_user.id}")],
-            [InlineKeyboardButton(text="🔴 Bloklash", callback_data=f"admin:block_user:{message.from_user.id}")]
+            [InlineKeyboardButton(text="Tasdiqlash", callback_data=f"admin:approve_user:{message.from_user.id}", style="success")],
+            [InlineKeyboardButton(text="Bloklash", callback_data=f"admin:block_user:{message.from_user.id}", style="danger")]
         ])
 
         username = f"@{message.from_user.username}" if message.from_user.username else "Yo'q"
