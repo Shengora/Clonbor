@@ -9,10 +9,10 @@ from bot.core.userbot import userbot_manager
 def get_main_keyboard():
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="My Stats", callback_data="user:stats")],
-            [InlineKeyboardButton(text="Yordamchi", callback_data="user:help")],
-            [InlineKeyboardButton(text="Pul yechish", callback_data="user:withdraw")],
-            [InlineKeyboardButton(text="Mening kartalarim", callback_data="user:cards")]
+            [InlineKeyboardButton(text="🔵 My Stats", callback_data="user:stats")],
+            [InlineKeyboardButton(text="🟢 Yordamchi", callback_data="user:help")],
+            [InlineKeyboardButton(text="🟢 Pul yechish", callback_data="user:withdraw")],
+            [InlineKeyboardButton(text="🔵 Mening kartalarim", callback_data="user:cards")]
         ]
     )
     return keyboard
