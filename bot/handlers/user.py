@@ -59,8 +59,8 @@ async def start_command(message: types.Message, bot: Bot):
         # Adminga yuborish
         from bot.core.config import ADMIN_IDS
         admin_markup = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="✅ Tasdiqlash", callback_data=f"admin:approve_user:{message.from_user.id}")],
-            [InlineKeyboardButton(text="❌ Bloklash", callback_data=f"admin:block_user:{message.from_user.id}")]
+            [InlineKeyboardButton(text="Tasdiqlash", callback_data=f"admin:approve_user:{message.from_user.id}", style="success")],
+            [InlineKeyboardButton(text="Bloklash", callback_data=f"admin:block_user:{message.from_user.id}", style="danger")]
         ])
 
         username = f"@{message.from_user.username}" if message.from_user.username else "Yo'q"
