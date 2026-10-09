@@ -3,52 +3,52 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 def get_admin_panel_keyboard() -> InlineKeyboardMarkup:
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         # Row 1
-        [InlineKeyboardButton(text="Nomer berishni o'chirish", callback_data="admin:toggle_number_status", style="danger")],
+        [InlineKeyboardButton(text="🔴 Nomer berishni o'chirish", callback_data="admin:toggle_number_status")],
 
         # Row 2
         [
-            InlineKeyboardButton(text="Whitelist", callback_data="admin:whitelist", style="success"),
-            InlineKeyboardButton(text="Blocklist", callback_data="admin:blocklist", style="success")
+            InlineKeyboardButton(text="🟢 Whitelist", callback_data="admin:whitelist"),
+            InlineKeyboardButton(text="🟢 Blocklist", callback_data="admin:blocklist")
         ],
 
         # Row 3
         [
-            InlineKeyboardButton(text="Statistika", callback_data="admin:statistics", style="primary"),
-            InlineKeyboardButton(text="Resetall", callback_data="admin:resetall", style="primary")
+            InlineKeyboardButton(text="🔵 Statistika", callback_data="admin:statistics"),
+            InlineKeyboardButton(text="🔵 Resetall", callback_data="admin:resetall")
         ],
 
         # Row 4
-        [InlineKeyboardButton(text="Broadcast", callback_data="admin:broadcast", style="primary")],
+        [InlineKeyboardButton(text="🔵 Broadcast", callback_data="admin:broadcast")],
 
         # Row 5
-        [InlineKeyboardButton(text="Slot limit", callback_data="admin:slot_limit", style="primary")],
+        [InlineKeyboardButton(text="🔵 Slot limit", callback_data="admin:slot_limit")],
 
         # Row 6
-        [InlineKeyboardButton(text="Akkauntlar", callback_data="admin:accounts", style="primary")],
+        [InlineKeyboardButton(text="🔵 Akkauntlar", callback_data="admin:accounts")],
 
         # Row 7
-        [InlineKeyboardButton(text="Kanallar", callback_data="admin:channels", style="primary")],
+        [InlineKeyboardButton(text="🔵 Kanallar", callback_data="admin:channels")],
 
         # Row 8
-        [InlineKeyboardButton(text="Beqaror raqamlar", callback_data="admin:unstable_numbers", style="primary")],
+        [InlineKeyboardButton(text="🔵 Beqaror raqamlar", callback_data="admin:unstable_numbers")],
 
         # Row 9
-        [InlineKeyboardButton(text="Balansni o'zgartirish", callback_data="admin:change_balance", style="primary")],
+        [InlineKeyboardButton(text="🔵 Balansni o'zgartirish", callback_data="admin:change_balance")],
 
         # Row 10
-        [InlineKeyboardButton(text="Habarlarni o'chirish", callback_data="admin:delete_messages", style="primary")],
+        [InlineKeyboardButton(text="🔵 Habarlarni o'chirish", callback_data="admin:delete_messages")],
 
         # Row 12
-        [InlineKeyboardButton(text="Stat yuklab olish", callback_data="admin:download_stat", style="primary")],
+        [InlineKeyboardButton(text="🔵 Stat yuklab olish", callback_data="admin:download_stat")],
 
         # Row 13
-        [InlineKeyboardButton(text="User narxi", callback_data="admin:user_price", style="primary")],
+        [InlineKeyboardButton(text="🔵 User narxi", callback_data="admin:user_price")],
 
         # Row 14
-        [InlineKeyboardButton(text="Log Kanal", callback_data="admin:log_channel", style="primary")],
+        [InlineKeyboardButton(text="🔵 Log Kanal", callback_data="admin:log_channel")],
 
         # Row 15
-        [InlineKeyboardButton(text="Manbalar", callback_data="admin:sources", style="primary")]
+        [InlineKeyboardButton(text="🔵 Manbalar", callback_data="admin:sources")]
     ])
 
     return keyboard
