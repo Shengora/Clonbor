@@ -1,3 +1,4 @@
+from __future__ import annotations
 from bot.handlers.user import register_user_handlers
 from bot.handlers.admin import register_admin_handlers
 from bot.handlers.session_creator import register_session_handlers

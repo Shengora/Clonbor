@@ -1,3 +1,4 @@
+from __future__ import annotations
 from pyrogram import Client, filters
 from pyrogram.types import Message
 from pyrogram.handlers import MessageHandler

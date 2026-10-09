@@ -1,3 +1,4 @@
+from __future__ import annotations
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 def get_admin_panel_keyboard() -> InlineKeyboardMarkup:

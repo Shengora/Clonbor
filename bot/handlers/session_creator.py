@@ -1,3 +1,4 @@
+from __future__ import annotations
 from pyrogram import Client
 from pyrogram.errors import SessionPasswordNeeded, PhoneCodeInvalid, PhoneCodeExpired
 from aiogram import types, Dispatcher, F
