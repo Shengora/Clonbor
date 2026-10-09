@@ -30,24 +30,12 @@ def get_admin_panel_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="Kanallar", callback_data="admin:channels")],
 
         # Row 8
-        [InlineKeyboardButton(text="Beqaror raqamlar", callback_data="admin:unstable_numbers")],
-
-        # Row 9
-        [InlineKeyboardButton(text="Balansni o'zgartirish", callback_data="admin:change_balance")],
-
-        # Row 10
-        [InlineKeyboardButton(text="Habarlarni o'chirish", callback_data="admin:delete_messages")],
-
-        # Row 12
         [InlineKeyboardButton(text="Stat yuklab olish", callback_data="admin:download_stat")],
 
-        # Row 13
+        # Row 9
         [InlineKeyboardButton(text="User narxi", callback_data="admin:user_price")],
 
-        # Row 14
-        [InlineKeyboardButton(text="Log Kanal", callback_data="admin:log_channel")],
-
-        # Row 15
+        # Row 10
         [InlineKeyboardButton(text="Manbalar", callback_data="admin:sources")]
     ])
 
