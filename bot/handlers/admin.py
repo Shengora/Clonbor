@@ -5,7 +5,7 @@ import asyncio
 
 from bot.database import db
 from bot.core.config import ADMIN_IDS
-from bot.keyboards.inline import get_admin_panel_keyboard, get_accounts_keyboard, get_sources_keyboard, get_back_to_main_keyboard
+from bot.keyboards.inline import get_admin_panel_keyboard, get_accounts_keyboard, get_sources_keyboard, get_back_to_main_keyboard, get_channels_management_keyboard
 from bot.handlers.fsm import AdminStates
 
 async def is_admin(user_id: int) -> bool:
@@ -153,10 +153,41 @@ async def admin_callback(callback_query: types.CallbackQuery, state: FSMContext)
         await callback_query.answer()
 
     elif action == "channels":
-        current_channels = await db.get_setting("channels")
-        text = f"Hozirgi kanallar:\n{current_channels}\n\nYangi kanallarni vergul bilan ajratib yozing (masalan: @kanal1, @kanal2). O'chirish uchun '0' yozing:"
+        mandatory = await db.get_setting("channel_mandatory")
+        number = await db.get_setting("channel_number")
+        premium = await db.get_setting("channel_premium")
+        withdrawal = await db.get_setting("channel_withdrawal")
+
+        await callback_query.message.edit_text(
+            "Ulash uchun tanlang (ixtiyoriy):",
+            reply_markup=get_channels_management_keyboard(
+                mandatory_set=bool(mandatory),
+                number_set=bool(number),
+                premium_set=bool(premium),
+                withdrawal_set=bool(withdrawal)
+            )
+        )
+        await callback_query.answer()
+
+    elif action.startswith("channel_type:"):
+        channel_type = action.split(":")[1]
+        type_names = {
+            "mandatory": "Majburiy obuna",
+            "number": "Raqam kanali",
+            "premium": "Premium kanali",
+            "withdrawal": "Pul yechish kanali"
+        }
+        name = type_names.get(channel_type, channel_type)
+        current_val = await db.get_setting(f"channel_{channel_type}")
+
+        text = f"{name} uchun username yoki havolani kiriting (masalan: @kanal_nomi):\n"
+        if current_val:
+            text += f"\nHozirgi ulangan kanal: {current_val}"
+        text += "\n\nO'chirish uchun '0' yozing."
+
         await callback_query.message.answer(text)
-        await state.set_state(AdminStates.waiting_for_channel)
+        await state.set_state(AdminStates.waiting_for_channel_value)
+        await state.update_data(channel_type=channel_type)
         await callback_query.answer()
 
     elif action == "log_channel":
@@ -333,10 +364,30 @@ async def process_channel(message: types.Message, state: FSMContext):
     value = message.text.strip()
     if value == '0':
         await db.set_setting("channels", "")
-        await message.answer("✅ Majburiy kanallar o'chirildi.")
+        await message.answer("✅ Eski majburiy kanallar o'chirildi.")
     else:
         await db.set_setting("channels", value)
-        await message.answer(f"✅ Majburiy kanallar o'rnatildi: {value}")
+        await message.answer(f"✅ Eski majburiy kanallar o'rnatildi: {value}")
+    await state.clear()
+
+async def process_channel_value(message: types.Message, state: FSMContext):
+    if not await is_admin(message.from_user.id):
+        return
+
+    data = await state.get_data()
+    channel_type = data.get("channel_type")
+    if not channel_type:
+        await state.clear()
+        return
+
+    value = message.text.strip()
+    if value == '0':
+        await db.set_setting(f"channel_{channel_type}", "")
+        await message.answer("✅ Kanal o'chirildi.")
+    else:
+        await db.set_setting(f"channel_{channel_type}", value)
+        await message.answer(f"✅ Kanal o'rnatildi: {value}")
+
     await state.clear()
 
 async def process_log_channel(message: types.Message, state: FSMContext):
@@ -447,6 +498,7 @@ def register_admin_handlers(dp: Dispatcher):
     dp.message.register(process_balance_amount, AdminStates.waiting_for_balance_amount)
     dp.message.register(process_setting_value, AdminStates.waiting_for_setting_value)
     dp.message.register(process_channel, AdminStates.waiting_for_channel)
+    dp.message.register(process_channel_value, AdminStates.waiting_for_channel_value)
     dp.message.register(process_log_channel, AdminStates.waiting_for_log_channel)
     dp.message.register(process_whitelist, AdminStates.waiting_for_whitelist)
     dp.message.register(process_blocklist, AdminStates.waiting_for_blocklist)

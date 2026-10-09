@@ -41,6 +41,20 @@ def get_admin_panel_keyboard() -> InlineKeyboardMarkup:
 
     return keyboard
 
+def get_channels_management_keyboard(mandatory_set: bool, number_set: bool, premium_set: bool, withdrawal_set: bool) -> InlineKeyboardMarkup:
+    mandatory_text = "✅ Majburiy obuna" if mandatory_set else "Majburiy obuna"
+    number_text = "✅ Raqam kanali" if number_set else "Raqam kanali"
+    premium_text = "✅ Premium kanali" if premium_set else "Premium kanali"
+    withdrawal_text = "✅ Pul yechish kanali" if withdrawal_set else "Pul yechish kanali"
+
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=mandatory_text, callback_data="admin:channel_type:mandatory")],
+        [InlineKeyboardButton(text=number_text, callback_data="admin:channel_type:number")],
+        [InlineKeyboardButton(text=premium_text, callback_data="admin:channel_type:premium")],
+        [InlineKeyboardButton(text=withdrawal_text, callback_data="admin:channel_type:withdrawal")],
+        [InlineKeyboardButton(text="Orqaga", callback_data="admin:main")]
+    ])
+
 def get_sources_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="Joriy manba haqida", callback_data="admin:source_info")],

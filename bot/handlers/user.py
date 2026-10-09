@@ -25,21 +25,23 @@ def get_reply_keyboard():
         resize_keyboard=True
     )
 
-async def check_channels(user_id: int, bot: Bot) -> bool:
-    channels_str = await db.get_setting("channels")
-    if not channels_str:
-        return True
+async def check_channels(user_id: int, bot: Bot, channel_type: str = "mandatory") -> tuple[bool, str]:
+    """
+    Checks if a user is subscribed to the specified channel type.
+    Returns (is_subscribed, channel_link_or_username).
+    """
+    channel = await db.get_setting(f"channel_{channel_type}")
+    if not channel:
+        return True, ""
 
-    channels = [c.strip() for c in channels_str.split(",") if c.strip()]
-    for channel in channels:
-        try:
-            member = await bot.get_chat_member(chat_id=channel, user_id=user_id)
-            if member.status in ['left', 'kicked']:
-                return False
-        except Exception:
-            # If bot is not admin in channel, we just assume false or ignore.
-            return False
-    return True
+    try:
+        member = await bot.get_chat_member(chat_id=channel, user_id=user_id)
+        if member.status in ['left', 'kicked']:
+            return False, channel
+        return True, ""
+    except Exception:
+        # If bot can't check (not admin or invalid), return False to be safe
+        return False, channel
 
 async def start_command(message: types.Message, bot: Bot):
     # Oldin bazada bormi yo'qligini tekshiramiz
@@ -85,9 +87,9 @@ async def start_command(message: types.Message, bot: Bot):
         await message.answer("❌ Siz bloklangansiz.")
         return
 
-    if not await check_channels(message.from_user.id, bot):
-        channels_str = await db.get_setting("channels")
-        await message.answer(f"Iltimos, botdan foydalanish uchun quyidagi kanallarga obuna bo'ling:\n{channels_str}")
+    is_sub, req_channel = await check_channels(message.from_user.id, bot, "mandatory")
+    if not is_sub:
+        await message.answer(f"Iltimos, botdan foydalanish uchun ushbu kanalga obuna bo'ling:\n{req_channel}")
         return
 
     await message.answer("🛠 Menyu:", reply_markup=get_reply_keyboard())
@@ -125,7 +127,12 @@ from aiogram.fsm.context import FSMContext
 from bot.handlers.fsm import UserStates
 from bot.core.config import ADMIN_IDS
 
-async def withdraw_handler(callback_query: types.CallbackQuery, state: FSMContext):
+async def withdraw_handler(callback_query: types.CallbackQuery, state: FSMContext, bot: Bot):
+    is_sub, req_channel = await check_channels(callback_query.from_user.id, bot, "withdrawal")
+    if not is_sub:
+        await callback_query.answer(f"Iltimos, pul yechish uchun kanalga obuna bo'ling: {req_channel}", show_alert=True)
+        return
+
     user = await db.get_user(callback_query.from_user.id)
     if not user:
         await callback_query.answer("Siz ro'yxatdan o'tmagansiz.", show_alert=True)
@@ -281,9 +288,9 @@ async def _log_number_to_channel(bot: Bot, user_id: int, user_info: str, respons
         logging.getLogger(__name__).error(f"Failed to log number to channel: {e}")
 
 async def get_number_command(message: types.Message, bot: Bot):
-    if not await check_channels(message.from_user.id, bot):
-        channels_str = await db.get_setting("channels")
-        await message.answer(f"Iltimos, avval quyidagi kanallarga obuna bo'ling:\n{channels_str}")
+    is_sub, req_channel = await check_channels(message.from_user.id, bot, "number")
+    if not is_sub:
+        await message.answer(f"Iltimos, raqam olish uchun ushbu kanalga obuna bo'ling:\n{req_channel}")
         return
 
     allowed, err_msg = await can_request_number(message.from_user.id)
@@ -306,8 +313,9 @@ async def get_number_command(message: types.Message, bot: Bot):
         await msg.edit_text("❌ Hozircha bo'sh raqamlar yo'q yoki manba bilan bog'lanishda xatolik yuz berdi.")
 
 async def get_number_handler(callback_query: types.CallbackQuery, bot: Bot):
-    if not await check_channels(callback_query.from_user.id, bot):
-        await callback_query.answer("Iltimos, avval kanallarga obuna bo'ling!", show_alert=True)
+    is_sub, req_channel = await check_channels(callback_query.from_user.id, bot, "number")
+    if not is_sub:
+        await callback_query.answer(f"Iltimos, raqam olish uchun kanalga obuna bo'ling: {req_channel}", show_alert=True)
         return
 
     allowed, err_msg = await can_request_number(callback_query.from_user.id)
